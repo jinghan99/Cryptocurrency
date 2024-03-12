@@ -7,7 +7,6 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @EnableScheduling
-@EnableAutoConfiguration
 @EnableJpaRepositories(basePackages = "org.dromara.northstar.data.jdbc")
 @SpringBootApplication
 public class NorthstarApplication {
