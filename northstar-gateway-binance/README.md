@@ -35,5 +35,12 @@ northstar盈富量化平台币安网关接口实现
    4. **代理：** 币安Api接口需要使用代理，启动项目时添加JVM参数配置代理ip端口
       -Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=18081 -Dhttps.proxyHost=127.0.0.1
       -Dhttps.proxyPort=18081
+
+![img_1.png](img_1.png)
+![img.png](img.png)
+```angular2html
+   -Dhttp.proxyHost=127.0.0.1  -Dhttp.proxyPort=10810  -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=10810
+
+```
    5. **官网文档：** 请使用前先通读一遍 [【官网文档】](https://www.quantit.tech/) 
 

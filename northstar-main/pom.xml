@@ -20,10 +20,22 @@
 			<groupId>org.dromara</groupId>
 			<artifactId>northstar-gateway-sim</artifactId>
 		</dependency>
+
 		<dependency>
 			<groupId>org.dromara</groupId>
 			<artifactId>northstar-gateway-playback</artifactId>
 		</dependency>
+
+		<dependency>
+			<groupId>org.dromara</groupId>
+			<artifactId>northstar-gateway-binance</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.dromara</groupId>
+			<artifactId>northstar-gateway-ctp</artifactId>
+		</dependency>
+
 		<dependency>
 			<groupId>org.dromara</groupId>
 			<artifactId>northstar-strategy-example</artifactId>

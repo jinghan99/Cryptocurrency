@@ -24,3 +24,14 @@ TIP
 
 注意：northstar-external 要设置为 northstar-main 的 dependencies，scope为 runtime
 
+### 添加services springboot 显示端口
+
+```angular2html
+ <component name="RunDashboard">
+  <option name="configurationTypes">
+    <set>
+      <option value="SpringBootApplicationConfigurationType" />
+    </set>
+  </option>
+</component>
+```

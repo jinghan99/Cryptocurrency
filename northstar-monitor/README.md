@@ -19,3 +19,7 @@ npm 淘宝镜像已经从 registry.npm.taobao.org 切换到了 registry.npmmirro
 npm cache clean --force
 // 2. 切换新源
 npm config set registry https://registry.npmmirror.com
+解决Missing binding node_modules\node-sass\vendor\win32-x64-83\binding.node
+可以重新下载 
+
+npm rebuild node-sass
