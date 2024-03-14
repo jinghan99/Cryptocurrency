@@ -85,3 +85,10 @@ spring:
     activate:
       on-profile: e2e
 
+logging:
+  level:
+    org:
+      dromara:
+        northstar:
+          strategy: debug
+

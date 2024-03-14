@@ -1,26 +1,16 @@
 package org.dromara.northstar.strategy;
 
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Queue;
-
+import com.alibaba.fastjson.JSONObject;
+import lombok.Getter;
+import lombok.Setter;
 import org.dromara.northstar.common.TickDataAware;
 import org.dromara.northstar.common.model.ContractSimpleInfo;
 import org.dromara.northstar.common.model.ModuleAccountDescription;
-import org.dromara.northstar.common.model.core.Bar;
-import org.dromara.northstar.common.model.core.Contract;
-import org.dromara.northstar.common.model.core.Order;
-import org.dromara.northstar.common.model.core.Tick;
-import org.dromara.northstar.common.model.core.Trade;
+import org.dromara.northstar.common.model.core.*;
 import org.dromara.northstar.common.utils.FieldUtils;
 import org.slf4j.Logger;
 
-import com.alibaba.fastjson.JSONObject;
-
-import lombok.Getter;
-import lombok.Setter;
+import java.util.*;
 
 public abstract class AbstractStrategy implements TradeStrategy{
 	
@@ -108,7 +98,7 @@ public abstract class AbstractStrategy implements TradeStrategy{
 	 */
 	@Override
 	public void onTick(Tick tick) {
-		if(!canProceed()) {
+  		if(!canProceed()) {
 			return;
 		}
 		if(tickHandlerMap.containsKey(tick.contract())) {
