@@ -11,7 +11,7 @@
     <groupId>org.dromara</groupId>
     <artifactId>northstar</artifactId>
     <version>${revision}</version>
-    <name>northstar</name>
+    <name>cryptocurrency</name>
     <packaging>pom</packaging>
     <description>量化交易平台</description>
     <url>https://gitee.com/dromara/northstar</url>
@@ -82,7 +82,7 @@
             <dependency>
                 <groupId>org.dromara</groupId>
                 <artifactId>northstar-external</artifactId>
-                <version>1.0-SNAPSHOT</version>
+                <version>1.0</version>
             </dependency>
 
             <dependency>
