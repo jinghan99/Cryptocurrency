@@ -11,7 +11,10 @@ northstar:
     
 logging:
   level: 
-    root: info
+   org:
+     dromara:
+       northstar:
+         strategy: debug
   file:
     path: logs/
   

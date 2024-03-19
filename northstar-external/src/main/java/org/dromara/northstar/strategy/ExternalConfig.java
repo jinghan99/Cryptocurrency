@@ -1,4 +1,4 @@
-package org.example;
+package org.dromara.northstar.strategy;
 
 import org.springframework.context.annotation.Configuration;
 
