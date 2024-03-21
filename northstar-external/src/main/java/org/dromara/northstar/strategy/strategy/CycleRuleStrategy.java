@@ -7,6 +7,7 @@ import org.dromara.northstar.common.model.core.Bar;
 import org.dromara.northstar.common.model.core.Contract;
 import org.dromara.northstar.common.model.core.Tick;
 import org.dromara.northstar.common.utils.TradeHelper;
+import org.dromara.northstar.indicator.constant.ValueType;
 import org.dromara.northstar.indicator.model.Configuration;
 import org.dromara.northstar.strategy.AbstractStrategy;
 import org.dromara.northstar.strategy.StrategicComponent;
@@ -53,20 +54,24 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
         switch (ctx.getState()) {
             case EMPTY -> {
                 if(cycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP) {
-                    helper.doBuyOpen(1);
+                    helper.doBuyOpen(ctx.getDefaultVolume());
                 }
                 if(cycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN) {
-                    helper.doBuyOpen(1);
+                    helper.doSellOpen(ctx.getDefaultVolume());
                 }
             }
             case HOLDING_LONG -> {
                 if(cycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN) {
-                    helper.doSellClose(1);
+                    logger.info("平多做空");
+                    helper.doSellClose(ctx.getDefaultVolume());
+                    helper.doSellOpen(ctx.getDefaultVolume());
                 }
             }
             case HOLDING_SHORT -> {
                 if(cycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP) {
-                    helper.doBuyClose(1);
+                    helper.doBuyClose(ctx.getDefaultVolume());
+                    helper.doBuyOpen(ctx.getDefaultVolume());
+                    logger.info("平空做多");
                 }
             }
             default -> { /* 其他情况不处理 */}
@@ -92,12 +97,13 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
 
     @Override
     protected void initIndicators() {
-        Contract c = ctx.getContract(params.indicatorSymbol);
+        Contract c = ctx.getContract(bindedContracts().get(0).getUnifiedSymbol());
         // 指标的创建
         this.cycleRuleIndicator = new CycleRuleIndicator(Configuration.builder()
                 .contract(c)
                 .indicatorName("Cycle")
-                .numOfUnits(ctx.numOfMinPerMergedBar()).build());
+                .valueType(ValueType.CLOSE)
+                .numOfUnits(ctx.numOfMinPerMergedBar()).build(),params.period);
         logger = ctx.getLogger(getClass());
         // 指标的注册
         ctx.registerIndicator(cycleRuleIndicator);
@@ -106,10 +112,7 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
 
     public static class InitParams extends DynamicParams {
 
-        @Setting(label="指标合约", order=0)
-        private String indicatorSymbol;
-
-        @Setting(label = "周期", type = FieldType.NUMBER, order = 1)
+        @Setting(label = "周期", type = FieldType.NUMBER, order = 0)
         private int period;
 
 
