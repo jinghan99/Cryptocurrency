@@ -60,4 +60,12 @@ public class CycleRuleIndicator extends AbstractIndicator implements Indicator {
         return Num.of(maxHigh, num.timestamp());
     }
 
+    public double getMaxHigh() {
+        return close.getData().stream().mapToDouble(Num::value).max().orElse(0);
+    }
+
+    public double getMinLow() {
+        return close.getData().stream().mapToDouble(Num::value).min().orElse(0);
+    }
+
 }
