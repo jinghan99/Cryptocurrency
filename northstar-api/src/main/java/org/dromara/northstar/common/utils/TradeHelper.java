@@ -78,7 +78,7 @@ public class TradeHelper {
 		doAction(SignalOperation.BUY_OPEN, price, vol, timeout, priceDiffConditionToAbort);
 	}
 	/**
-	 * 对手价买开
+	 * 多开
 	 * @param vol
 	 */
 	public void doBuyOpen(int vol) {
@@ -97,7 +97,7 @@ public class TradeHelper {
 		doAction(SignalOperation.SELL_OPEN, price, vol, timeout, priceDiffConditionToAbort);
 	}
 	/**
-	 * 对手价卖开
+	 * 空开
 	 * @param vol
 	 */
 	public void doSellOpen(int vol) {
@@ -116,7 +116,7 @@ public class TradeHelper {
 		doAction(SignalOperation.BUY_CLOSE, price, vol, timeout, priceDiffConditionToAbort);
 	}
 	/**
-	 * 对手价买平
+	 * 平空
 	 * @param vol
 	 */
 	public void doBuyClose(int vol) {
@@ -135,7 +135,7 @@ public class TradeHelper {
 		doAction(SignalOperation.SELL_CLOSE, price, vol, timeout, priceDiffConditionToAbort);
 	}
 	/**
-	 * 对手价卖平
+	 * 平多
 	 * @param vol
 	 */
 	public void doSellClose(int vol) {

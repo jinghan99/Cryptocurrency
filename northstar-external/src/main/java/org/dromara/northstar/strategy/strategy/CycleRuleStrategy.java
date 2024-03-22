@@ -73,6 +73,17 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
                 }
             }
             case HOLDING_LONG -> {
+                if (costPrice > 0 && cycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP) {
+                    double maxHigh = cycleRuleIndicator.getMaxHigh();
+                    double range = maxHigh - costPrice;
+                    if (range > 0) {
+                        double stopWinPrice = maxHigh - params.stopWinRate * range;
+                        if (bar.closePrice() < stopWinPrice) {
+                            helper.doSellClose(ctx.getDefaultVolume());
+                            logger.info("平多");
+                        }
+                    }
+                }
                 if (cycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN) {
                     logger.info("平多做空");
                     helper.doSellClose(ctx.getDefaultVolume());
@@ -80,6 +91,18 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
                 }
             }
             case HOLDING_SHORT -> {
+                if (costPrice > 0 && cycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN) {
+                    double minLow = cycleRuleIndicator.getMinLow();
+                    double range = costPrice - minLow;
+                    if (range > 0) {
+                        double stopWinPrice = minLow + params.stopWinRate * range;
+                        if (bar.closePrice()  > stopWinPrice) {
+                            logger.info("平空");
+                            helper.doBuyClose(ctx.getDefaultVolume());
+
+                        }
+                    }
+                }
                 if (cycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP) {
                     helper.doBuyClose(ctx.getDefaultVolume());
                     helper.doBuyOpen(ctx.getDefaultVolume());
@@ -93,36 +116,6 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
     @Override
     public void onTick(Tick tick) {
         logger.info("时间：{} {} 价格：{} ", tick.actionDay(), tick.actionTime(), tick.lastPrice());
-        switch (ctx.getState()) {
-            case HOLDING_LONG -> {
-                if (costPrice > 0 && cycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP) {
-                    double maxHigh = cycleRuleIndicator.getMaxHigh();
-                    double range = maxHigh - costPrice;
-                    if (range > 0) {
-                        double stopWinPrice = maxHigh - params.stopWinRate * range;
-                        if (tick.lastPrice() < stopWinPrice) {
-                            logger.info("平多");
-                            helper.doSellClose(ctx.getDefaultVolume());
-                        }
-                    }
-                }
-            }
-            case HOLDING_SHORT -> {
-                if (costPrice > 0 && cycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN) {
-                    double minLow = cycleRuleIndicator.getMinLow();
-                    double range = costPrice - minLow;
-                    if (range > 0) {
-                        double stopWinPrice = minLow + params.stopWinRate * range;
-                        if (tick.lastPrice() > stopWinPrice) {
-                            logger.info("平空");
-                            helper.doSellClose(ctx.getDefaultVolume());
-
-                        }
-                    }
-                }
-            }
-            default -> { /* 其他情况不处理 */}
-        }
     }
 
 
