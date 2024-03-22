@@ -192,7 +192,11 @@ public class ModuleAccount implements IModuleAccount{
 		}
 		return posTable.get(direction, contract).totalVolume();
 	}
-	
+	@Override
+	public List<Trade> getNonclosedTrades(Contract contract, DirectionEnum direction){
+		return posTable.get(direction, contract).getNonclosedTrades();
+	}
+
 	@Override
 	public int getNonclosedPosition(Contract contract, DirectionEnum direction, boolean isPresentTradingDay) {
 		ModulePosition mp = posTable.get(direction, contract);

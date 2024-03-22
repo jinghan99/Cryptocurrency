@@ -4,7 +4,10 @@ import org.dromara.northstar.common.TickDataAware;
 import org.dromara.northstar.common.TransactionAware;
 import org.dromara.northstar.common.model.core.Contract;
 
+import org.dromara.northstar.common.model.core.Trade;
 import xyz.redtorch.pb.CoreEnum.DirectionEnum;
+
+import java.util.List;
 
 /**
  * 模组账户代表一个模组内部的逻辑账户
@@ -31,6 +34,8 @@ public interface IModuleAccount extends TickDataAware, TransactionAware {
 	 * @return
 	 */
 	int getNonclosedPosition(Contract contract, DirectionEnum direction);
+
+	List<Trade> getNonclosedTrades(Contract contract, DirectionEnum direction);
 	/**
 	 * 获取指定合约指定方向的持仓数
 	 * @param unifiedSymbol
