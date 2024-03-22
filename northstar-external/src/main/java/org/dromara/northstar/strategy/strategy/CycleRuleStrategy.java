@@ -36,10 +36,6 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
 
     protected static final String NAME = "jh周期法则策略";
 
-    /**
-     * 成本价
-     */
-    private double costPrice;
 
     private CycleRuleIndicator cycleRuleIndicator;
 
@@ -124,7 +120,7 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
 
         switch (ctx.getState()) {
             case EMPTY -> {
-//                if (preDirection != null && cycleRuleIndicator.getDirectionEnum() == preDirection) {
+//                if (cycleRuleIndicator.getDirectionEnum() == preDirection) {
 //                    break;
 //                }
                 if (cycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP) {
@@ -187,7 +183,7 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
         @Setting(label = "周期", type = FieldType.NUMBER, order = 0)
         private int period;
 
-        @Setting(label = "止盈", type = FieldType.NUMBER, order = 0)
+        @Setting(label = "止盈率", type = FieldType.NUMBER, order = 1)
         private double stopWinRate;
 
 
