@@ -17,6 +17,7 @@ import org.dromara.northstar.strategy.AbstractStrategy;
 import org.dromara.northstar.strategy.StrategicComponent;
 import org.dromara.northstar.strategy.TradeStrategy;
 import org.dromara.northstar.strategy.constant.PriceType;
+import org.dromara.northstar.strategy.constant.StopWinEnum;
 import org.dromara.northstar.strategy.indicator.CycleRuleIndicator;
 import org.dromara.northstar.strategy.constant.DirectionEnum;
 import org.dromara.northstar.strategy.model.TradeIntent;
@@ -37,7 +38,8 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
     protected static final String NAME = "jh周期法则策略";
 
 
-    private CycleRuleIndicator cycleRuleIndicator;
+    private CycleRuleIndicator maxCycleRuleIndicator;
+    private CycleRuleIndicator minCycleRuleIndicator;
 
     private InitParams params;    // 策略的参数配置信息
 
@@ -61,7 +63,7 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
         logger.debug("{} K线数据： 开 [{}], 高 [{}], 低 [{}], 收 [{}]",
                 bar.contract().unifiedSymbol(), bar.openPrice(), bar.highPrice(), bar.lowPrice(), bar.closePrice());
         // 确保指标已经准备好再开始交易
-        boolean allLineReady = cycleRuleIndicator.isReady();
+        boolean allLineReady = maxCycleRuleIndicator.isReady() && minCycleRuleIndicator.isReady();
         if (!allLineReady) {
             logger.debug("指标未准备就绪");
             return;
@@ -71,70 +73,91 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
         int shortPos = ctx.getModuleAccount().getNonclosedPosition(c, CoreEnum.DirectionEnum.D_Sell);
         List<Trade> buyTrade = ctx.getModuleAccount().getNonclosedTrades(c, CoreEnum.DirectionEnum.D_Buy);
         List<Trade> sellTrade = ctx.getModuleAccount().getNonclosedTrades(c, CoreEnum.DirectionEnum.D_Sell);
+        StopWinEnum stopWinEnum = StopWinEnum.get(params.stopType);
 //        持多仓
         if (longPos > 0) {
-//            成本价
-            double costPrice = buyTrade.stream().mapToDouble(trade -> trade.price()).sum() / buyTrade.size();
-            if (costPrice > 0 && cycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP) {
-                double maxHigh = cycleRuleIndicator.getMaxHigh();
-                double range = maxHigh - costPrice;
-//                止盈
-                if (range > 0 && bar.closePrice() < maxHigh) {
-                    double stopWinPrice = maxHigh - params.stopWinRate * range;
-                    double start = costPrice + params.stopWinRate * range;
-                    if (bar.closePrice() > start && bar.closePrice() < stopWinPrice) {
+//            止盈类型
+            switch (stopWinEnum) {
+                case MIN_PERIOD -> {
+                    if (minCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN) {
                         helper.doSellClose(longPos);
                         logger.info("平多");
                     }
                 }
+                case TURN_DOWN_RATE -> {
+                    //            成本价
+                    double costPrice = buyTrade.stream().mapToDouble(trade -> trade.price()).sum() / buyTrade.size();
+                    if (costPrice > 0 && maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP) {
+                        double maxHigh = maxCycleRuleIndicator.getMaxHigh();
+                        double range = maxHigh - costPrice;
+                        if (range > 0 && bar.closePrice() < maxHigh) {
+                            double stopWinPrice = maxHigh - params.stopWinRate * range;
+                            double start = costPrice + params.stopWinRate * range;
+                            if (bar.closePrice() > start && bar.closePrice() < stopWinPrice) {
+                                helper.doSellClose(longPos);
+                                logger.info("平多");
+                            }
+                        }
+                    }
+                }
             }
-            if (cycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN) {
+            if (maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN) {
                 logger.info("平多做空");
                 helper.doSellClose(longPos);
-                helper.doSellOpen(ctx.getDefaultVolume());
+                if (minCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN) {
+                    helper.doSellOpen(ctx.getDefaultVolume());
+                }
             }
             return;
         }
         // 持空仓
         if (shortPos > 0) {
-            double costPrice = sellTrade.stream().mapToDouble(trade -> trade.price()).sum() / sellTrade.size();
-            if (costPrice > 0 && cycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN) {
-                double minLow = cycleRuleIndicator.getMinLow();
-                double range = costPrice - minLow;
-                if (range > 0 && bar.closePrice() > minLow) {
-                    double stopWinPrice = minLow + params.stopWinRate * range;
-                    double start = costPrice - params.stopWinRate * range;
-                    if (bar.closePrice() < start && bar.closePrice() > stopWinPrice) {
+            switch (stopWinEnum) {
+                case MIN_PERIOD -> {
+                    if (minCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN) {
                         logger.info("平空");
                         helper.doBuyClose(ctx.getDefaultVolume());
                     }
                 }
+                case TURN_DOWN_RATE -> {
+                    double costPrice = sellTrade.stream().mapToDouble(trade -> trade.price()).sum() / sellTrade.size();
+                    if (costPrice > 0 && maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN) {
+                        double minLow = maxCycleRuleIndicator.getMinLow();
+                        double range = costPrice - minLow;
+                        if (range > 0 && bar.closePrice() > minLow) {
+                            double stopWinPrice = minLow + params.stopWinRate * range;
+                            double start = costPrice - params.stopWinRate * range;
+                            if (bar.closePrice() < start && bar.closePrice() > stopWinPrice) {
+                                logger.info("平空");
+                                helper.doBuyClose(ctx.getDefaultVolume());
+                            }
+                        }
+                    }
+                }
             }
-            if (cycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP) {
+            if (maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP) {
                 logger.info("平空做多");
                 helper.doBuyClose(shortPos);
-                helper.doBuyOpen(ctx.getDefaultVolume());
+                if (minCycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP) {
+                    helper.doBuyOpen(ctx.getDefaultVolume());
+                }
             }
             return;
         }
-
         switch (ctx.getState()) {
             case EMPTY -> {
-//                if (cycleRuleIndicator.getDirectionEnum() == preDirection) {
-//                    break;
-//                }
-                if (cycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP) {
+                if (maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP && minCycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP) {
                     logger.info("做多");
                     helper.doBuyOpen(ctx.getDefaultVolume());
                 }
-                if (cycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN) {
+                if (maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN && minCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN) {
                     logger.info("做空");
                     helper.doSellOpen(ctx.getDefaultVolume());
                 }
             }
             default -> { /* 其他情况不处理 */}
         }
-        preDirection = cycleRuleIndicator.getDirectionEnum();
+        preDirection = maxCycleRuleIndicator.getDirectionEnum();
     }
 
     @Override
@@ -157,14 +180,22 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
     protected void initIndicators() {
         Contract c = ctx.getContract(bindedContracts().get(0).getUnifiedSymbol());
         // 指标的创建
-        this.cycleRuleIndicator = new CycleRuleIndicator(Configuration.builder()
+        this.maxCycleRuleIndicator = new CycleRuleIndicator(Configuration.builder()
                 .contract(c)
-                .indicatorName("Cycle")
+                .indicatorName("CycleMax")
                 .valueType(ValueType.CLOSE)
-                .numOfUnits(ctx.numOfMinPerMergedBar()).build(), params.period);
+                .numOfUnits(ctx.numOfMinPerMergedBar()).build(), params.maxPeriod);
+        this.minCycleRuleIndicator = new CycleRuleIndicator(Configuration.builder()
+                .contract(c)
+                .indicatorName("CycleMin")
+                .valueType(ValueType.CLOSE)
+                .numOfUnits(ctx.numOfMinPerMergedBar()).build(), params.minPeriod);
+
+
         logger = ctx.getLogger(getClass());
         // 指标的注册
-        ctx.registerIndicator(cycleRuleIndicator);
+        ctx.registerIndicator(maxCycleRuleIndicator);
+        ctx.registerIndicator(minCycleRuleIndicator);
         helper = TradeHelper.builder().context(getContext()).tradeContract(c).build();
     }
 
@@ -180,12 +211,17 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
 
     public static class InitParams extends DynamicParams {
 
-        @Setting(label = "周期", type = FieldType.NUMBER, order = 0)
-        private int period;
+        @Setting(label = "大周期", type = FieldType.NUMBER, order = 0)
+        private int maxPeriod = 13;
 
-        @Setting(label = "止盈率", type = FieldType.NUMBER, order = 1)
-        private double stopWinRate;
+        @Setting(label = "小周期", type = FieldType.NUMBER, order = 1)
+        private int minPeriod = 6;
 
+        @Setting(label = "止盈类型", type = FieldType.SELECT, options = {"小周期止盈", "回撤率止盈"}, optionsVal = {"MIN_PERIOD", "TURN_DOWN_RATE"}, order = 2)
+        private String stopType = "TURN_DOWN_RATE";
+
+        @Setting(label = "止盈率", type = FieldType.NUMBER, order = 3)
+        private double stopWinRate = 0.3;
 
     }
 
