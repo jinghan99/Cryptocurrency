@@ -45,16 +45,13 @@ public class CycleRuleIndicator extends AbstractIndicator implements Indicator {
             return Num.NaN();
         }
         double price = num.value();
-        double prevMaxHigh = close.getData().stream()
+        List<Num> prevList = close.getData().stream()
                 .sorted(Comparator.comparingLong(Num::timestamp)) // 根据时间戳升序排序
-                .limit(close.getData().size() - 1) // 去除最后一位
-                .mapToDouble(Num::value) // 提取值
+                .limit(close.getData().size() - 1).toList();
+        double prevMaxHigh = prevList.stream().mapToDouble(Num::value) // 提取值
                 .max() // 计算最大值
                 .orElse(0); // 如果流为空，则返回0
-        double prevMinLow = close.getData().stream()
-                .sorted(Comparator.comparingLong(Num::timestamp)) // 根据时间戳升序排序
-                .limit(close.getData().size() - 1) // 去除最后一位
-                .mapToDouble(Num::value) // 提取值
+        double prevMinLow = prevList.stream().mapToDouble(Num::value) // 去除最后一位
                 .min() // 计算最小值
                 .orElse(0); // 如果流为空，则返回0
 //        向上突破

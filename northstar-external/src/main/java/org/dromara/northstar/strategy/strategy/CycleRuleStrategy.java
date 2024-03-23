@@ -185,16 +185,16 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
 
     @Override
     protected void initIndicators() {
-        Contract c = ctx.getContract(bindedContracts().get(0).getUnifiedSymbol());
+        Contract c = ctx.getContract(bindedContracts().getFirst().getUnifiedSymbol());
         // 指标的创建
         this.maxCycleRuleIndicator = new CycleRuleIndicator(Configuration.builder()
                 .contract(c)
-                .indicatorName("CycleMax")
+                .indicatorName("Cycle_max_"+params.maxPeriod)
                 .valueType(ValueType.CLOSE)
                 .numOfUnits(ctx.numOfMinPerMergedBar()).build(), params.maxPeriod);
         this.minCycleRuleIndicator = new CycleRuleIndicator(Configuration.builder()
                 .contract(c)
-                .indicatorName("CycleMin")
+                .indicatorName("Cycle_min_"+params.minPeriod)
                 .valueType(ValueType.CLOSE)
                 .numOfUnits(ctx.numOfMinPerMergedBar()).build(), params.minPeriod);
 
