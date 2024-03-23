@@ -13,6 +13,7 @@ import org.dromara.northstar.strategy.constant.DirectionEnum;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -24,7 +25,7 @@ public class CycleRuleIndicator extends AbstractIndicator implements Indicator {
 
 
     @Getter
-    DirectionEnum directionEnum;
+    DirectionEnum directionEnum = DirectionEnum.NON;
 
     private Indicator close;
 
@@ -44,20 +45,38 @@ public class CycleRuleIndicator extends AbstractIndicator implements Indicator {
             return Num.NaN();
         }
         double price = num.value();
-        double maxHigh = close.getData().stream().mapToDouble(Num::value).max().orElse(0);
-        double minLow = close.getData().stream().mapToDouble(Num::value).min().orElse(0);
-        if (price >= maxHigh && (directionEnum == null || directionEnum == DirectionEnum.DOWN)) {
+        double prevMaxHigh = close.getData().stream()
+                .sorted(Comparator.comparingLong(Num::timestamp)) // 根据时间戳升序排序
+                .limit(close.getData().size() - 1) // 去除最后一位
+                .mapToDouble(Num::value) // 提取值
+                .max() // 计算最大值
+                .orElse(0); // 如果流为空，则返回0
+        double prevMinLow = close.getData().stream()
+                .sorted(Comparator.comparingLong(Num::timestamp)) // 根据时间戳升序排序
+                .limit(close.getData().size() - 1) // 去除最后一位
+                .mapToDouble(Num::value) // 提取值
+                .min() // 计算最小值
+                .orElse(0); // 如果流为空，则返回0
+//        向上突破
+        if (price > prevMaxHigh) {
+            directionEnum = DirectionEnum.UP_BREAKTHROUGH;
+            return Num.of(prevMinLow, num.timestamp());
+        }
+//        向下突破
+        if (price < prevMinLow) {
+            directionEnum = DirectionEnum.DOWN_BREAKTHROUGH;
+            return Num.of(prevMaxHigh, num.timestamp());
+        }
+        if (directionEnum.isUPing()) {
             directionEnum = DirectionEnum.UP;
-            return Num.of(minLow, num.timestamp());
+            return Num.of(prevMinLow, num.timestamp());
         }
-        if (price <= minLow && (directionEnum == null || directionEnum == DirectionEnum.UP)) {
+
+        if (directionEnum.isDowning()) {
             directionEnum = DirectionEnum.DOWN;
-            return Num.of(maxHigh, num.timestamp());
+            return Num.of(prevMaxHigh, num.timestamp());
         }
-        if (directionEnum == DirectionEnum.UP) {
-            return Num.of(minLow, num.timestamp());
-        }
-        return Num.of(maxHigh, num.timestamp());
+        return Num.NaN();
     }
 
     public double getMaxHigh() {

@@ -48,10 +48,6 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
 
     private TradeHelper helper;
 
-    /**
-     * 记录上一个 K 线方向
-     */
-    private DirectionEnum preDirection;
 
     @Override
     public String name() {
@@ -68,7 +64,20 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
             logger.debug("指标未准备就绪");
             return;
         }
-        Contract c = ctx.getContract(bindedContracts().get(0).getUnifiedSymbol());
+        switch (ctx.getState()) {
+            case EMPTY -> {
+                if (maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isUPing()) {
+                    logger.info("做多");
+                    helper.doBuyOpen(ctx.getDefaultVolume());
+                }
+                if (maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isDowning()) {
+                    logger.info("做空");
+                    helper.doSellOpen(ctx.getDefaultVolume());
+                }
+            }
+            default -> { /* 其他情况不处理 */}
+        }
+        Contract c = ctx.getContract(bindedContracts().getFirst().getUnifiedSymbol());
         int longPos = ctx.getModuleAccount().getNonclosedPosition(c, CoreEnum.DirectionEnum.D_Buy);
         int shortPos = ctx.getModuleAccount().getNonclosedPosition(c, CoreEnum.DirectionEnum.D_Sell);
         List<Trade> buyTrade = ctx.getModuleAccount().getNonclosedTrades(c, CoreEnum.DirectionEnum.D_Buy);
@@ -76,35 +85,42 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
         StopWinEnum stopWinEnum = StopWinEnum.get(params.stopType);
 //        持多仓
         if (longPos > 0) {
-//            止盈类型
-            switch (stopWinEnum) {
-                case MIN_PERIOD -> {
-                    if (minCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN) {
-                        helper.doSellClose(longPos);
-                        logger.info("平多");
+            if (maxCycleRuleIndicator.getDirectionEnum().isUPing()) {
+                //止盈类型
+                switch (stopWinEnum) {
+                    case MIN_PERIOD -> {
+                        if (minCycleRuleIndicator.getDirectionEnum().isDowning()) {
+                            helper.doSellClose(longPos);
+                            logger.info("小周期止盈止损 平多 {}", bar.closePrice());
+                        }
+                        break;
                     }
-                }
-                case TURN_DOWN_RATE -> {
-                    //            成本价
-                    double costPrice = buyTrade.stream().mapToDouble(trade -> trade.price()).sum() / buyTrade.size();
-                    if (costPrice > 0 && maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP) {
+                    case TURN_DOWN_RATE -> {
+                        //成本价
+                        double costPrice = buyTrade.stream().mapToDouble(Trade::price).sum() / buyTrade.size();
                         double maxHigh = maxCycleRuleIndicator.getMaxHigh();
-                        double range = maxHigh - costPrice;
-                        if (range > 0 && bar.closePrice() < maxHigh) {
+                        double range = Math.abs(maxHigh - costPrice);
+                        if (bar.closePrice() > costPrice && bar.closePrice() < maxHigh) {
                             double stopWinPrice = maxHigh - params.stopWinRate * range;
-                            double start = costPrice + params.stopWinRate * range;
-                            if (bar.closePrice() > start && bar.closePrice() < stopWinPrice) {
+                            if (bar.closePrice() < stopWinPrice) {
                                 helper.doSellClose(longPos);
-                                logger.info("平多");
+                                logger.info("回撤率止盈 平多 成本价 {} , close {}", costPrice, bar.closePrice());
+                            }
+                        }
+                        if (bar.closePrice() < costPrice) {
+                            double stopLossPrice = costPrice - params.stopWinRate * range;
+                            if (bar.closePrice() < stopLossPrice) {
+                                helper.doSellClose(longPos);
+                                logger.info("回撤率止损 平多 成本价 {} , close {}", costPrice, bar.closePrice());
                             }
                         }
                     }
                 }
             }
-            if (maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN) {
-                logger.info("平多做空");
+            if (maxCycleRuleIndicator.getDirectionEnum().isDowning()) {
+                logger.info("止损平多做空 {}", bar.closePrice());
                 helper.doSellClose(longPos);
-                if (minCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN) {
+                if (maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isDowning()) {
                     helper.doSellOpen(ctx.getDefaultVolume());
                 }
             }
@@ -112,52 +128,43 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
         }
         // 持空仓
         if (shortPos > 0) {
-            switch (stopWinEnum) {
-                case MIN_PERIOD -> {
-                    if (minCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN) {
-                        logger.info("平空");
-                        helper.doBuyClose(ctx.getDefaultVolume());
+            if (maxCycleRuleIndicator.getDirectionEnum().isDowning()) {
+                switch (stopWinEnum) {
+                    case MIN_PERIOD -> {
+                        if (minCycleRuleIndicator.getDirectionEnum().isUPing()) {
+                            logger.info("小周期止盈 平空 {}", bar.closePrice());
+                            helper.doBuyClose(shortPos);
+                        }
                     }
-                }
-                case TURN_DOWN_RATE -> {
-                    double costPrice = sellTrade.stream().mapToDouble(trade -> trade.price()).sum() / sellTrade.size();
-                    if (costPrice > 0 && maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN) {
+                    case TURN_DOWN_RATE -> {
+                        double costPrice = sellTrade.stream().mapToDouble(Trade::price).sum() / sellTrade.size();
                         double minLow = maxCycleRuleIndicator.getMinLow();
-                        double range = costPrice - minLow;
-                        if (range > 0 && bar.closePrice() > minLow) {
+                        double range = Math.abs(costPrice - minLow);
+                        if (bar.closePrice() < costPrice && bar.closePrice() > minLow) {
                             double stopWinPrice = minLow + params.stopWinRate * range;
-                            double start = costPrice - params.stopWinRate * range;
-                            if (bar.closePrice() < start && bar.closePrice() > stopWinPrice) {
-                                logger.info("平空");
-                                helper.doBuyClose(ctx.getDefaultVolume());
+                            if (bar.closePrice() > stopWinPrice) {
+                                helper.doBuyClose(shortPos);
+                                logger.info("回撤率止盈 平空 成本价 {} , close {}", costPrice, bar.closePrice());
+                            }
+                        }
+                        if (bar.closePrice() > costPrice) {
+                            double stopLossPrice = costPrice + params.stopWinRate * range;
+                            if (bar.closePrice() > stopLossPrice) {
+                                helper.doBuyClose(shortPos);
+                                logger.info("回撤率止损 平空 成本价 {} , close {}", costPrice, bar.closePrice());
                             }
                         }
                     }
                 }
             }
-            if (maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP) {
-                logger.info("平空做多");
+            if (maxCycleRuleIndicator.getDirectionEnum().isUPing()) {
+                logger.info("止损平空做多 {}", bar.closePrice());
                 helper.doBuyClose(shortPos);
-                if (minCycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP) {
+                if (maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isUPing()) {
                     helper.doBuyOpen(ctx.getDefaultVolume());
                 }
             }
-            return;
         }
-        switch (ctx.getState()) {
-            case EMPTY -> {
-                if (maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP && minCycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP) {
-                    logger.info("做多");
-                    helper.doBuyOpen(ctx.getDefaultVolume());
-                }
-                if (maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN && minCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN) {
-                    logger.info("做空");
-                    helper.doSellOpen(ctx.getDefaultVolume());
-                }
-            }
-            default -> { /* 其他情况不处理 */}
-        }
-        preDirection = maxCycleRuleIndicator.getDirectionEnum();
     }
 
     @Override
