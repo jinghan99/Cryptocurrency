@@ -11,8 +11,10 @@ import org.dromara.northstar.common.model.core.Tick;
 import org.dromara.northstar.common.model.core.Trade;
 import org.dromara.northstar.common.utils.FieldUtils;
 import org.dromara.northstar.common.utils.TradeHelper;
+import org.dromara.northstar.indicator.Indicator;
 import org.dromara.northstar.indicator.constant.ValueType;
 import org.dromara.northstar.indicator.model.Configuration;
+import org.dromara.northstar.indicator.trend.MAIndicator;
 import org.dromara.northstar.strategy.AbstractStrategy;
 import org.dromara.northstar.strategy.StrategicComponent;
 import org.dromara.northstar.strategy.TradeStrategy;
@@ -41,6 +43,9 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
     private CycleRuleIndicator maxCycleRuleIndicator;
     private CycleRuleIndicator minCycleRuleIndicator;
 
+
+    private Indicator maIndicator;
+
     private InitParams params;    // 策略的参数配置信息
 
 
@@ -59,18 +64,18 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
         logger.debug("{} K线数据： 开 [{}], 高 [{}], 低 [{}], 收 [{}]",
                 bar.contract().unifiedSymbol(), bar.openPrice(), bar.highPrice(), bar.lowPrice(), bar.closePrice());
         // 确保指标已经准备好再开始交易
-        boolean allLineReady = maxCycleRuleIndicator.isReady() && minCycleRuleIndicator.isReady();
+        boolean allLineReady = maxCycleRuleIndicator.isReady() && minCycleRuleIndicator.isReady() && maIndicator.isReady();
         if (!allLineReady) {
             logger.debug("指标未准备就绪");
             return;
         }
         switch (ctx.getState()) {
             case EMPTY -> {
-                if (maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isUPing()) {
+                if (isBuyOpen(bar)) {
                     logger.info("做多");
                     helper.doBuyOpen(ctx.getDefaultVolume());
                 }
-                if (maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isDowning()) {
+                if (isSellOpen(bar)) {
                     logger.info("做空");
                     helper.doSellOpen(ctx.getDefaultVolume());
                 }
@@ -93,7 +98,6 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
                             helper.doSellClose(longPos);
                             logger.info("小周期止盈止损 平多 {}", bar.closePrice());
                         }
-                        break;
                     }
                     case TURN_DOWN_RATE -> {
                         //成本价
@@ -120,7 +124,7 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
             if (maxCycleRuleIndicator.getDirectionEnum().isDowning()) {
                 logger.info("止损平多做空 {}", bar.closePrice());
                 helper.doSellClose(longPos);
-                if (maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isDowning()) {
+                if (isSellOpen(bar)) {
                     helper.doSellOpen(ctx.getDefaultVolume());
                 }
             }
@@ -160,7 +164,7 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
             if (maxCycleRuleIndicator.getDirectionEnum().isUPing()) {
                 logger.info("止损平空做多 {}", bar.closePrice());
                 helper.doBuyClose(shortPos);
-                if (maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isUPing()) {
+                if (isBuyOpen(bar)) {
                     helper.doBuyOpen(ctx.getDefaultVolume());
                 }
             }
@@ -189,20 +193,28 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
         // 指标的创建
         this.maxCycleRuleIndicator = new CycleRuleIndicator(Configuration.builder()
                 .contract(c)
-                .indicatorName("Cycle_max_"+params.maxPeriod)
+                .indicatorName("Cycle_max_" + params.maxPeriod)
                 .valueType(ValueType.CLOSE)
                 .numOfUnits(ctx.numOfMinPerMergedBar()).build(), params.maxPeriod);
+
         this.minCycleRuleIndicator = new CycleRuleIndicator(Configuration.builder()
                 .contract(c)
-                .indicatorName("Cycle_min_"+params.minPeriod)
+                .indicatorName("Cycle_min_" + params.minPeriod)
                 .valueType(ValueType.CLOSE)
                 .numOfUnits(ctx.numOfMinPerMergedBar()).build(), params.minPeriod);
 
+
+        this.maIndicator = new MAIndicator(Configuration.builder()
+                .contract(c)
+                .indicatorName("ma_" + params.maLen)
+                .valueType(ValueType.CLOSE)
+                .numOfUnits(ctx.numOfMinPerMergedBar()).build(), params.maLen);
 
         logger = ctx.getLogger(getClass());
         // 指标的注册
         ctx.registerIndicator(maxCycleRuleIndicator);
         ctx.registerIndicator(minCycleRuleIndicator);
+        ctx.registerIndicator(maIndicator);
         helper = TradeHelper.builder().context(getContext()).tradeContract(c).build();
     }
 
@@ -216,6 +228,26 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
         logger.info("当前模组状态：{}", ctx.getState());
     }
 
+    /**
+     * 判断是否允许做多
+     *
+     * @return`·
+     */
+    private boolean isBuyOpen(Bar bar) {
+        return maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isUPing() && bar.closePrice() > maIndicator.value(0);
+    }
+
+
+    /**
+     * 判断是否允许开空
+     *
+     * @return`·
+     */
+    private boolean isSellOpen(Bar bar) {
+        return maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isDowning() && bar.closePrice() < maIndicator.value(0);
+    }
+
+
     public static class InitParams extends DynamicParams {
 
         @Setting(label = "大周期", type = FieldType.NUMBER, order = 0)
@@ -227,7 +259,12 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
         @Setting(label = "止盈类型", type = FieldType.SELECT, options = {"小周期止盈", "回撤率止盈"}, optionsVal = {"MIN_PERIOD", "TURN_DOWN_RATE"}, order = 2)
         private String stopType = "TURN_DOWN_RATE";
 
-        @Setting(label = "止盈率", type = FieldType.NUMBER, order = 3)
+
+        @Setting(label = "MA均线", type = FieldType.NUMBER, order = 3)
+        private int maLen = 21;
+
+
+        @Setting(label = "止盈率", type = FieldType.NUMBER, order = 4)
         private double stopWinRate = 0.3;
 
     }
