@@ -46,6 +46,8 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
 
     Indicator trueRangeIndicator;
 
+    Indicator atr;
+
     private Indicator maIndicator;
 
     private InitParams params;    // 策略的参数配置信息
@@ -214,9 +216,15 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
 
         this.trueRangeIndicator = new TrueRangeIndicator(Configuration.builder()
                 .contract(c)
-                .indicatorName("ma_" + params.maLen)
+                .indicatorName("tr")
                 .valueType(ValueType.CLOSE)
                 .numOfUnits(ctx.numOfMinPerMergedBar()).build());
+
+        this.atr = new MAIndicator(Configuration.builder()
+                .contract(c)
+                .indicatorName("atr_" + params.atrLen)
+                .valueType(ValueType.CLOSE)
+                .numOfUnits(ctx.numOfMinPerMergedBar()).build(),trueRangeIndicator, params.atrLen);
 
         logger = ctx.getLogger(getClass());
         // 指标的注册
@@ -243,7 +251,7 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
      * @return`·
      */
     private boolean isBuyOpen(Bar bar) {
-        return maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isUPing() && bar.closePrice() > maIndicator.value(0) && trueRangeIndicator.value(0) > params.trLimit;
+        return maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isUPing() && bar.closePrice() > maIndicator.value(0) && atr.value(0) > params.atrLimit;
     }
 
 
@@ -253,29 +261,33 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
      * @return`·
      */
     private boolean isSellOpen(Bar bar) {
-        return maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isDowning() && bar.closePrice() < maIndicator.value(0) && trueRangeIndicator.value(0) > params.trLimit;
+        return maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isDowning() && bar.closePrice() < maIndicator.value(0) && atr.value(0) > params.atrLimit;
     }
 
 
     public static class InitParams extends DynamicParams {
 
         @Setting(label = "大周期", type = FieldType.NUMBER, order = 0)
-        private int maxPeriod = 13;
+        private int maxPeriod = 15;
 
         @Setting(label = "小周期", type = FieldType.NUMBER, order = 1)
-        private int minPeriod = 6;
+        private int minPeriod = 7;
 
         @Setting(label = "止盈类型", type = FieldType.SELECT, options = {"小周期止盈", "回撤率止盈"}, optionsVal = {"MIN_PERIOD", "TURN_DOWN_RATE"}, order = 2)
-        private String stopType = "TURN_DOWN_RATE";
+        private String stopType = "MIN_PERIOD";
 
         @Setting(label = "止盈率", type = FieldType.NUMBER, order = 3)
         private double stopWinRate = 0.3;
 
         @Setting(label = "MA均线", type = FieldType.NUMBER, order = 4)
-        private int maLen = 21;
+        private int maLen = 18;
 
-        @Setting(label = "tr限制数", type = FieldType.NUMBER, order = 5)
-        private int trLimit = 21;
+        @Setting(label = "atr长度", type = FieldType.NUMBER, order = 5)
+        private int atrLen = 5;
+
+
+        @Setting(label = "atr限制数", type = FieldType.NUMBER, order = 5)
+        private double atrLimit = 0.0001;
 
 
     }

@@ -28,9 +28,7 @@ import org.dromara.northstar.gateway.playback.ticker.TickSimulationAlgorithm;
 import com.google.common.collect.Lists;
 
 import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
 
-@Slf4j
 public class ContractDataLoader {
 	
 	private IDataSource dsMgr;
@@ -94,7 +92,6 @@ public class ContractDataLoader {
 	}
 	
 	public void loadBarsAndTicks(LocalDate tradingDay){
-		log.info("正在加载 [{}] 合约 {} 的数据", contract.name(), tradingDay);
 		loadBars(tradingDay);
 		tickQ.clear();
 		LocalDate thisFriday = utils.getFridayOfThisWeek(tradingDay);

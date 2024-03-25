@@ -1,5 +1,7 @@
 package org.dromara.northstar.ai;
 
+import java.util.function.Consumer;
+
 public interface SamplingAware {
 
 	/**
@@ -9,9 +11,7 @@ public interface SamplingAware {
 	SampleData sample();
 	
 	/**
-	 * 是否处于采样阶段
-	 * @return
+	 * 插入回调函数
 	 */
-	boolean isSampling();
-	
+	void setOnBarCallback(Consumer<SampleData> callback);
 }

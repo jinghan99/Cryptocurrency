@@ -10,7 +10,7 @@ northstar:
     baseUrl: https://service.quantit.tech:443
     
 logging:
-  level:
+  level: 
     root: info
   file:
     path: logs/

@@ -1,6 +1,5 @@
 package org.dromara.northstar.module;
 
-import java.io.File;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -24,9 +23,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.StringUtils;
-import org.dromara.northstar.ai.SampleData;
-import org.dromara.northstar.ai.SamplingAware;
-import org.dromara.northstar.ai.sampling.SampleDataWriter;
 import org.dromara.northstar.common.constant.Constants;
 import org.dromara.northstar.common.constant.DateTimeConstant;
 import org.dromara.northstar.common.constant.ModuleState;
@@ -136,8 +132,6 @@ public class ModuleContext implements IModuleContext{
 	
 	protected OrderRequestFilter orderReqFilter;
 	
-	protected ModuleStateMachine moduleStateMachine;
-	
 	public ModuleContext(TradeStrategy tradeStrategy, ModuleDescription moduleDescription, ModuleRuntimeDescription moduleRtDescription,
 			IContractManager contractMgr, IModuleRepository moduleRepo, BarMergerRegistry barMergerRegistry) {
 		this.tradeStrategy = tradeStrategy;
@@ -147,9 +141,7 @@ public class ModuleContext implements IModuleContext{
 		this.loggerFactory = new ModuleLoggerFactory(moduleDescription.getModuleName());
 		this.logger = loggerFactory.getLogger(getClass().getName());
 		this.bufSize.set(moduleDescription.getModuleCacheDataSize());
-		this.moduleStateMachine = new ModuleStateMachine(this);
-		this.moduleAccount = new ModuleAccount(moduleDescription, moduleRtDescription, moduleRepo, contractMgr, this);
-		this.moduleStateMachine.setModuleAccount(this.moduleAccount);
+		this.moduleAccount = new ModuleAccount(moduleDescription, moduleRtDescription, new ModuleStateMachine(this), moduleRepo, contractMgr, this);
 		this.orderReqFilter = new DefaultOrderFilter(moduleDescription.getModuleAccountSettingsDescription().stream().flatMap(mad -> mad.getBindedContracts().stream()).toList(), this);
 		moduleDescription.getModuleAccountSettingsDescription().stream()
 			.forEach(mad -> {
@@ -192,8 +184,8 @@ public class ModuleContext implements IModuleContext{
 		mktCenter.lastTick(tradeIntent.getContract()).ifPresentOrElse(tick -> {
 			logger.info("收到下单意图：{}", tradeIntent);
 			tradeIntent.setContext(this);
-			tradeIntent.onTick(tick);	
 			tradeIntentMap.put(tradeIntent.getContract(), tradeIntent);
+	        tradeIntent.onTick(tick);	
 		}, () -> logger.warn("没有TICK行情数据时，忽略下单请求"));
 	}
 
@@ -214,7 +206,7 @@ public class ModuleContext implements IModuleContext{
 
 	@Override
 	public ModuleState getState() {
-		return moduleStateMachine.getState();
+		return moduleAccount.getModuleState();
 	}
 
 	@Override
@@ -309,15 +301,6 @@ public class ModuleContext implements IModuleContext{
 		if(isEnabled()) {
 			moduleRepo.saveRuntime(getRuntimeDescription(false));
 		}
-		
-		// 执行采样逻辑
-		// 注意，只有在模组启用状态下，才会进行采样。这样是为了避免在模组预热时进行采样
-		if(tradeStrategy instanceof SamplingAware sa && isEnabled() && sa.isSampling()) {
-			SampleData sampleData = sa.sample();
-			File csvFile = new File(String.format("data/%s.csv", getModule().getName()));
-			SampleDataWriter writer = new SampleDataWriter(csvFile);
-			writer.append(sampleData);
-		}
 	}
 	
 	private void visualize(Indicator indicator, Bar bar, JSONObject json) {
@@ -356,7 +339,6 @@ public class ModuleContext implements IModuleContext{
 			TradeIntent tradeIntent = tradeIntentMap.get(order.contract());
 			tradeIntent.onOrder(order);
 		}
-		moduleStateMachine.onOrder(order);
 	}
 
 	@Override
@@ -379,7 +361,6 @@ public class ModuleContext implements IModuleContext{
 				tradeIntentMap.remove(trade.contract());
 			}
 		}
-		moduleStateMachine.onTrade(trade);
 	}
 
 	@Override
@@ -427,7 +408,7 @@ public class ModuleContext implements IModuleContext{
 		ModuleRuntimeDescription mad = ModuleRuntimeDescription.builder()
 				.moduleName(module.getName())
 				.enabled(module.isEnabled())
-				.moduleState(getState())
+				.moduleState(moduleAccount.getModuleState())
 				.storeObject(tradeStrategy.getStoreObject())
 				.strategyInfos(tradeStrategy.strategyInfos())
 				.moduleAccountRuntime(accRtDescription)
@@ -503,7 +484,7 @@ public class ModuleContext implements IModuleContext{
 		String id = UUID.randomUUID().toString();
 		String gatewayId = getAccount(contract).accountId();
 		DirectionEnum direction = OrderUtils.resolveDirection(operation);
-		int factor = priceType == PriceType.ANY_PRICE ? 0 : FieldUtils.directionFactor(direction);	// 市价时没有超价处理
+		int factor = FieldUtils.directionFactor(direction);
 		double plusPrice = module.getModuleDescription().getOrderPlusTick() * contract.priceTick(); // 超价设置
 		Position pos = getAccount(contract).getPosition(OrderUtils.getClosingDirection(direction), contract)
 				.orElse(Position.builder().contract(contract).build());
@@ -546,21 +527,19 @@ public class ModuleContext implements IModuleContext{
 			setEnabled(false);
 			return null;
 		}
-		moduleStateMachine.onSubmitReq();
 		try {
 			if(Objects.nonNull(orderReqFilter)) {
 				orderReqFilter.doFilter(orderReq);
 			}
-			Contract contract = orderReq.contract();
-			String originOrderId = module.getAccount(contract).submitOrder(orderReq);
-			orderReqMap.put(originOrderId, orderReq);
-			return originOrderId;
 		} catch (Exception e) {
 			logger.error("发单失败。原因：{}", e.getMessage());
 			tradeIntentMap.remove(orderReq.contract());
-			moduleStateMachine.onFailSubmitReq();
 			return null;
 		}
+		Contract contract = orderReq.contract();
+		String originOrderId = module.getAccount(contract).submitOrder(orderReq);
+		orderReqMap.put(originOrderId, orderReq);
+		return originOrderId;
 	}
 
 	@Override
@@ -576,7 +555,7 @@ public class ModuleContext implements IModuleContext{
 	@Override
 	public void cancelOrder(String originOrderId) {
 		if(!orderReqMap.containsKey(originOrderId)) {
-			logger.warn("找不到订单：{}", originOrderId);
+			logger.debug("找不到订单：{}", originOrderId);
 			return;
 		}
 		if(!getState().isOrdering()) {

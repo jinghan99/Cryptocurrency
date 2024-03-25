@@ -112,7 +112,6 @@ public class PlaybackModuleContext extends ModuleContext implements IModuleConte
 		DirectionEnum direction = OrderUtils.resolveDirection(operation);
 		OffsetFlagEnum offsetFlag = operation.isOpen() ? OffsetFlagEnum.OF_Open : OffsetFlagEnum.OF_Close;
 		String gatewayId = getAccount(contract).accountId();
-		moduleStateMachine.onSubmitReq();
 		try {
 			moduleAccount.onSubmitOrder(SubmitOrderReq.builder()
 							.originOrderId(id)
@@ -133,7 +132,6 @@ public class PlaybackModuleContext extends ModuleContext implements IModuleConte
 			tradeIntentMap.remove(contract);
 			logger.warn("模组余额不足，主动停用模组");
 			setEnabled(false);
-			moduleStateMachine.onFailSubmitReq();
 			return Optional.empty();
 		}
 		
@@ -153,7 +151,6 @@ public class PlaybackModuleContext extends ModuleContext implements IModuleConte
 				.build();
 		moduleAccount.onOrder(order);
 		tradeStrategy.onOrder(order);
-		moduleStateMachine.onOrder(order);
 		
 		Trade trade = Trade.builder()
 				.gatewayId(PLAYBACK_GATEWAY)
@@ -170,7 +167,6 @@ public class PlaybackModuleContext extends ModuleContext implements IModuleConte
 				.build();
 		moduleAccount.onTrade(trade);
 		tradeStrategy.onTrade(trade);
-		moduleStateMachine.onTrade(trade);
 		return Optional.of(id);
 	}
 

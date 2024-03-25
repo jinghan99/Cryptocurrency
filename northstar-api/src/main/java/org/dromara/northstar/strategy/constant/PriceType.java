@@ -10,7 +10,7 @@ public enum PriceType {
 	ANY_PRICE("市价") {
 		@Override
 		public double resolvePrice(Tick tick, SignalOperation operation, double price) {
-			return operation.isBuy() ? tick.upperLimit() : tick.lowerLimit();
+			return 0;
 		}
 	},
 	

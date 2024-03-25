@@ -29,14 +29,14 @@ public abstract class AbstractModelBasedStrategy extends AbstractStrategy implem
 		super.setContext(context);
 		Logger logger = context.getLogger(getClass());
 		// 处于非采样阶段时，需要检查预训练模型是否存在
-		if(!isSampling()) {
-			logger.info("准备从models目录加载预训练模型");
-			Path path = Paths.get("models/" + getContext().getModule().getName());
-			if(!path.toFile().exists()) {
-				throw new IllegalStateException("在models目录下找不到此模组的预训练模型");
-			}
-			model = new PretrainedModel(path, inputDim(), outputDim());
-		}
+//		if(!isSampling()) {
+//			logger.info("准备从models目录加载预训练模型");
+//			Path path = Paths.get("models/" + getContext().getModule().getName());
+//			if(!path.toFile().exists()) {
+//				throw new IllegalStateException("在models目录下找不到此模组的预训练模型");
+//			}
+//			model = new PretrainedModel(path, inputDim(), outputDim());
+//		}
 	}
 
 	/**

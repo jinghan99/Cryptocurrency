@@ -26,8 +26,6 @@ public class ModuleStateMachine implements TransactionAware {
 	
 	private ModuleState curState = ModuleState.EMPTY;
 	
-	private ModuleState stagingState;
-	
 	private ModuleAccount moduleAccount;
 	
 	private final Logger logger;
@@ -104,12 +102,7 @@ public class ModuleStateMachine implements TransactionAware {
 		if(curState.isOrdering()) {
 			throw new IllegalStateException(String.format("当前状态：%s，不能继续下单", curState));
 		}
-		stagingState = curState;
 		setState(ModuleState.PLACING_ORDER);
-	}
-	
-	public void onFailSubmitReq() {
-		setState(stagingState);
 	}
 
 	public void setModuleAccount(ModuleAccount moduleAccount) {
