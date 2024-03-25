@@ -15,6 +15,7 @@ import org.dromara.northstar.indicator.Indicator;
 import org.dromara.northstar.indicator.constant.ValueType;
 import org.dromara.northstar.indicator.model.Configuration;
 import org.dromara.northstar.indicator.trend.MAIndicator;
+import org.dromara.northstar.indicator.volatility.TrueRangeIndicator;
 import org.dromara.northstar.strategy.AbstractStrategy;
 import org.dromara.northstar.strategy.StrategicComponent;
 import org.dromara.northstar.strategy.TradeStrategy;
@@ -43,6 +44,7 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
     private CycleRuleIndicator maxCycleRuleIndicator;
     private CycleRuleIndicator minCycleRuleIndicator;
 
+    Indicator trueRangeIndicator;
 
     private Indicator maIndicator;
 
@@ -210,11 +212,18 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
                 .valueType(ValueType.CLOSE)
                 .numOfUnits(ctx.numOfMinPerMergedBar()).build(), params.maLen);
 
+        this.trueRangeIndicator = new TrueRangeIndicator(Configuration.builder()
+                .contract(c)
+                .indicatorName("ma_" + params.maLen)
+                .valueType(ValueType.CLOSE)
+                .numOfUnits(ctx.numOfMinPerMergedBar()).build());
+
         logger = ctx.getLogger(getClass());
         // 指标的注册
         ctx.registerIndicator(maxCycleRuleIndicator);
         ctx.registerIndicator(minCycleRuleIndicator);
         ctx.registerIndicator(maIndicator);
+        ctx.registerIndicator(this.trueRangeIndicator);
         helper = TradeHelper.builder().context(getContext()).tradeContract(c).build();
     }
 
@@ -234,7 +243,7 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
      * @return`·
      */
     private boolean isBuyOpen(Bar bar) {
-        return maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isUPing() && bar.closePrice() > maIndicator.value(0);
+        return maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isUPing() && bar.closePrice() > maIndicator.value(0) && trueRangeIndicator.value(0) > params.trLimit;
     }
 
 
@@ -244,7 +253,7 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
      * @return`·
      */
     private boolean isSellOpen(Bar bar) {
-        return maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isDowning() && bar.closePrice() < maIndicator.value(0);
+        return maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isDowning() && bar.closePrice() < maIndicator.value(0) && trueRangeIndicator.value(0) > params.trLimit;
     }
 
 
@@ -259,13 +268,15 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
         @Setting(label = "止盈类型", type = FieldType.SELECT, options = {"小周期止盈", "回撤率止盈"}, optionsVal = {"MIN_PERIOD", "TURN_DOWN_RATE"}, order = 2)
         private String stopType = "TURN_DOWN_RATE";
 
+        @Setting(label = "止盈率", type = FieldType.NUMBER, order = 3)
+        private double stopWinRate = 0.3;
 
-        @Setting(label = "MA均线", type = FieldType.NUMBER, order = 3)
+        @Setting(label = "MA均线", type = FieldType.NUMBER, order = 4)
         private int maLen = 21;
 
+        @Setting(label = "tr限制数", type = FieldType.NUMBER, order = 5)
+        private int trLimit = 21;
 
-        @Setting(label = "止盈率", type = FieldType.NUMBER, order = 4)
-        private double stopWinRate = 0.3;
 
     }
 
