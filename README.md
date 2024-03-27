@@ -35,3 +35,6 @@ TIP
   </option>
 </component>
 ```
+```shell
+java  -jar "-Dloader.path=$(pwd)"  "-Dhttp.proxyHost=127.0.0.1" "-Dhttp.proxyPort=10810" "-Dhttps.proxyHost=127.0.0.1" "-Dhttps.proxyPort=10810" "-Dfile.encoding=UTF-8"   -Denv=dev northstar-7.1.0.jar  
+```
