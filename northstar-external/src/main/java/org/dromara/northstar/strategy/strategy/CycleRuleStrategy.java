@@ -1,8 +1,6 @@
 package org.dromara.northstar.strategy.strategy;
 
 import org.dromara.northstar.common.constant.FieldType;
-import org.dromara.northstar.common.constant.ModuleState;
-import org.dromara.northstar.common.constant.SignalOperation;
 import org.dromara.northstar.common.model.DynamicParams;
 import org.dromara.northstar.common.model.Setting;
 import org.dromara.northstar.common.model.core.Bar;
@@ -12,6 +10,7 @@ import org.dromara.northstar.common.model.core.Trade;
 import org.dromara.northstar.common.utils.FieldUtils;
 import org.dromara.northstar.common.utils.TradeHelper;
 import org.dromara.northstar.indicator.Indicator;
+import org.dromara.northstar.indicator.constant.PeriodUnit;
 import org.dromara.northstar.indicator.constant.ValueType;
 import org.dromara.northstar.indicator.model.Configuration;
 import org.dromara.northstar.indicator.trend.MACDIndicator;
@@ -20,11 +19,9 @@ import org.dromara.northstar.indicator.volatility.TrueRangeIndicator;
 import org.dromara.northstar.strategy.AbstractStrategy;
 import org.dromara.northstar.strategy.StrategicComponent;
 import org.dromara.northstar.strategy.TradeStrategy;
-import org.dromara.northstar.strategy.constant.PriceType;
 import org.dromara.northstar.strategy.constant.StopWinEnum;
 import org.dromara.northstar.strategy.indicator.CycleRuleIndicator;
 import org.dromara.northstar.strategy.constant.DirectionEnum;
-import org.dromara.northstar.strategy.model.TradeIntent;
 import org.slf4j.Logger;
 import xyz.redtorch.pb.CoreEnum;
 
@@ -36,8 +33,7 @@ import java.util.List;
  * * @author KevinHuangwl
  */
 @StrategicComponent(CycleRuleStrategy.NAME)
-public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码，引入一个通用的基础抽象类
-        implements TradeStrategy {
+public class CycleRuleStrategy extends AbstractStrategy implements TradeStrategy {
 
     protected static final String NAME = "jh周期法则策略";
 
@@ -223,13 +219,11 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
         this.trueRangeIndicator = new TrueRangeIndicator(Configuration.builder()
                 .contract(c)
                 .indicatorName("tr")
-                .valueType(ValueType.CLOSE)
-                .numOfUnits(ctx.numOfMinPerMergedBar()).build());
+                .numOfUnits(params.trPeriod).period(PeriodUnit.MINUTE).build());
 
         this.atr = new MAIndicator(Configuration.builder()
                 .contract(c)
                 .indicatorName("atr_" + params.atrLen)
-                .valueType(ValueType.CLOSE)
                 .numOfUnits(ctx.numOfMinPerMergedBar()).build(), trueRangeIndicator, params.atrLen);
 
         this.macdIndicator = new MACDIndicator(Configuration.builder()
@@ -243,6 +237,8 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
                 .indicatorName("macd_ma_" + params.macdMaLen)
                 .valueType(ValueType.CLOSE)
                 .numOfUnits(ctx.numOfMinPerMergedBar()).build(), macdIndicator, params.macdMaLen);
+
+
         this.macdDiff = macdIndicator.getDiffLine();
         this.macdDea = macdIndicator.getDeaLine();
         logger = ctx.getLogger(getClass());
@@ -308,16 +304,19 @@ public class CycleRuleStrategy extends AbstractStrategy    // 为了简化代码
         @Setting(label = "atr长度", type = FieldType.NUMBER, order = 5)
         private int atrLen = 5;
 
-        @Setting(label = "atr限制数", type = FieldType.NUMBER, order = 6)
+        @Setting(label = "tr周期", type = FieldType.NUMBER, order = 6)
+        private int trPeriod = 60;
+
+        @Setting(label = "atr限制数", type = FieldType.NUMBER, order = 7)
         private double atrLimit = 0.0001;
 
-        @Setting(label = "macdMa均线", type = FieldType.NUMBER, order = 7)
+        @Setting(label = "macdMa均线", type = FieldType.NUMBER, order = 8)
         private int macdMaLen = 3;
 
-        @Setting(label = "macd_MA_long做多 限制", type = FieldType.NUMBER, order = 8)
+        @Setting(label = "macd_MA_long做多 限制", type = FieldType.NUMBER, order = 9)
         private double macdMaLong = 0.0001;
 
-        @Setting(label = "macd_MA_short做空 限制", type = FieldType.NUMBER, order = 9)
+        @Setting(label = "macd_MA_short做空 限制", type = FieldType.NUMBER, order = 10)
         private double macdMaShort = 0.0001;
 
 
