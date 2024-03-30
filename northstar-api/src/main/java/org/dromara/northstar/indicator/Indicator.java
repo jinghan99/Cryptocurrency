@@ -29,6 +29,7 @@ public interface Indicator {
 	 * @return			返回一个按时间升序的列表数据
 	 */
 	public List<Num> getData();
+	public List<Num> getDataByAsc();
 	/**
 	 * 值更新
 	 * 此接口为幂等设计：同一个Num对象，更新多次与更新一次的效果相等。这个设计主要是使用户编写策略时可以避免考虑同一个指标可能存在的多次更新问题。

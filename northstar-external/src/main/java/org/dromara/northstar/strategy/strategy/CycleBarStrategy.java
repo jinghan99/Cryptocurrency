@@ -28,11 +28,11 @@ import java.util.List;
  * <p>
  * * @author KevinHuangwl
  */
-@StrategicComponent(CycleTickStrategy.NAME)
-public class CycleTickStrategy extends AbstractStrategy    // 为了简化代码，引入一个通用的基础抽象类
+@StrategicComponent(CycleBarStrategy.NAME)
+public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码，引入一个通用的基础抽象类
         implements TradeStrategy {
 
-    protected static final String NAME = "jh周期1bar止盈法则策略";
+    protected static final String NAME = "jhCycleBar止盈法则策略";
 
 
     private CycleRuleIndicator maxCycleRuleIndicator;
@@ -84,12 +84,17 @@ public class CycleTickStrategy extends AbstractStrategy    // 为了简化代码
         Contract c = ctx.getContract(bindedContracts().getFirst().getUnifiedSymbol());
         int longPos = ctx.getModuleAccount().getNonclosedPosition(c, CoreEnum.DirectionEnum.D_Buy);
         int shortPos = ctx.getModuleAccount().getNonclosedPosition(c, CoreEnum.DirectionEnum.D_Sell);
+        List<Trade> buyTrade = ctx.getModuleAccount().getNonclosedTrades(c, CoreEnum.DirectionEnum.D_Buy);
+        List<Trade> sellTrade = ctx.getModuleAccount().getNonclosedTrades(c, CoreEnum.DirectionEnum.D_Sell);
 //        持多仓
         if (longPos > 0) {
             if (maxCycleRuleIndicator.getDirectionEnum().isUPing()) {
                 if (minCycleRuleIndicator.getDirectionEnum().isDowning()) {
-                    helper.doSellClose(longPos);
-                    logger.info("小周期止盈 平多 {}", bar.closePrice());
+                    double costPrice = buyTrade.stream().mapToDouble(Trade::price).sum() / buyTrade.size();
+                    if (bar.closePrice() > costPrice + params.smallPeriodTakeProfitMinPoints) {
+                        helper.doSellClose(longPos);
+                        logger.info("小周期bar止盈 平多 现价{}，成本价{} ,小周期数据 {}", bar.closePrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
+                    }
                 }
             }
             if (maxCycleRuleIndicator.getDirectionEnum().isDowning()) {
@@ -105,8 +110,11 @@ public class CycleTickStrategy extends AbstractStrategy    // 为了简化代码
         if (shortPos > 0) {
             if (maxCycleRuleIndicator.getDirectionEnum().isDowning()) {
                 if (minCycleRuleIndicator.getDirectionEnum().isUPing()) {
-                    logger.info("小周期止盈 平空 {}", bar.closePrice());
-                    helper.doBuyClose(shortPos);
+                    double costPrice = sellTrade.stream().mapToDouble(Trade::price).sum() / sellTrade.size();
+                    if (bar.closePrice() < costPrice - params.smallPeriodTakeProfitMinPoints) {
+                        logger.info("小周期tick止盈 平空 现价{}，成本价{} ,小周期数据 {}", bar.closePrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
+                        helper.doBuyClose(shortPos);
+                    }
                 }
             }
             if (maxCycleRuleIndicator.getDirectionEnum().isUPing()) {
@@ -123,42 +131,6 @@ public class CycleTickStrategy extends AbstractStrategy    // 为了简化代码
     @Override
     public void onTick(Tick tick) {
         logger.debug("时间：{} {} 价格：{} ", tick.actionDay(), tick.actionTime(), tick.lastPrice());
-        // 确保指标已经准备好再开始交易
-        boolean allLineReady = maxCycleRuleIndicator.isReady() && minCycleRuleIndicator.isReady() && maIndicator.isReady();
-        if (!allLineReady) {
-            logger.debug("指标未准备就绪");
-            return;
-        }
-        Contract c = ctx.getContract(bindedContracts().getFirst().getUnifiedSymbol());
-        int longPos = ctx.getModuleAccount().getNonclosedPosition(c, CoreEnum.DirectionEnum.D_Buy);
-        int shortPos = ctx.getModuleAccount().getNonclosedPosition(c, CoreEnum.DirectionEnum.D_Sell);
-        List<Trade> buyTrade = ctx.getModuleAccount().getNonclosedTrades(c, CoreEnum.DirectionEnum.D_Buy);
-        List<Trade> sellTrade = ctx.getModuleAccount().getNonclosedTrades(c, CoreEnum.DirectionEnum.D_Sell);
-//        持多仓
-        if (longPos > 0) {
-            if (maxCycleRuleIndicator.getDirectionEnum().isUPing()) {
-                if (minCycleRuleIndicator.getDirectionEnum().isDowning()) {
-                    double costPrice = buyTrade.stream().mapToDouble(Trade::price).sum() / buyTrade.size();
-                    if (tick.lastPrice() > costPrice + params.smallPeriodTakeProfitMinPoints) {
-                        helper.doSellClose(longPos);
-                        logger.info("小周期tick止盈 平多 现价{}，成本价{} ,小周期数据 {}", tick.lastPrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
-                    }
-                }
-            }
-            return;
-        }
-        // 持空仓
-        if (shortPos > 0) {
-            if (maxCycleRuleIndicator.getDirectionEnum().isDowning()) {
-                if (minCycleRuleIndicator.getDirectionEnum().isUPing()) {
-                    double costPrice = sellTrade.stream().mapToDouble(Trade::price).sum() / sellTrade.size();
-                    if (tick.lastPrice() < costPrice - params.smallPeriodTakeProfitMinPoints) {
-                        logger.info("小周期tick止盈 平空 现价{}，成本价{} ,小周期数据 {}", tick.lastPrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
-                        helper.doBuyClose(shortPos);
-                    }
-                }
-            }
-        }
     }
 
     @Override
@@ -235,24 +207,22 @@ public class CycleTickStrategy extends AbstractStrategy    // 为了简化代码
     public static class InitParams extends DynamicParams {
 
         @Setting(label = "大周期", type = FieldType.NUMBER, order = 0)
-        private int maxPeriod = 15;
+        private int maxPeriod = 75;
 
         @Setting(label = "大周期MA均线", type = FieldType.NUMBER, order = 1)
-        private int maLen = 18;
+        private int maLen = 90;
 
         @Setting(label = "小周期bar级别", type = FieldType.NUMBER, order = 2)
         private int minMinute = 1;
 
-        @Setting(label = "小周期止盈", type = FieldType.NUMBER, order = 3)
+        @Setting(label = "小周期开仓持续数", type = FieldType.NUMBER, order = 3)
+        private int smallPeriodOpenDuration = 3;
+
+        @Setting(label = "小周期止盈周期", type = FieldType.NUMBER, order = 4)
         private int minPeriod = 6;
 
-
-        @Setting(label = "小周期止盈最小点数", type = FieldType.NUMBER, order = 3)
+        @Setting(label = "小周期止盈最小点数", type = FieldType.NUMBER, order =5)
         private double smallPeriodTakeProfitMinPoints = 0.0002;
-
-
-        @Setting(label = "小周期开仓持续数", type = FieldType.NUMBER, order = 4)
-        private int smallPeriodOpenDuration = 3;
 
 
     }
