@@ -32,7 +32,7 @@ import java.util.List;
 public class CycleTickStrategy extends AbstractStrategy    // 为了简化代码，引入一个通用的基础抽象类
         implements TradeStrategy {
 
-    protected static final String NAME = "jh周期1bar止盈法则策略";
+    protected static final String NAME = "jh周期tick止盈法则策略";
 
 
     private CycleRuleIndicator maxCycleRuleIndicator;
@@ -244,7 +244,7 @@ public class CycleTickStrategy extends AbstractStrategy    // 为了简化代码
         private int minMinute = 1;
 
         @Setting(label = "小周期止盈", type = FieldType.NUMBER, order = 3)
-        private int minPeriod = 6;
+        private int minPeriod = 7;
 
 
         @Setting(label = "小周期止盈最小点数", type = FieldType.NUMBER, order = 3)
@@ -252,7 +252,7 @@ public class CycleTickStrategy extends AbstractStrategy    // 为了简化代码
 
 
         @Setting(label = "小周期开仓持续数", type = FieldType.NUMBER, order = 4)
-        private int smallPeriodOpenDuration = 3;
+        private int smallPeriodOpenDuration = 2;
 
 
     }
