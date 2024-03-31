@@ -60,6 +60,11 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
 
     private DateTime startTime;
 
+    /**
+     * 记录差异的值
+     */
+    DirectionEnum mindirectionEnum;
+
     @Override
     public String name() {
         return NAME;
@@ -87,6 +92,7 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
         logger.info("{} K线数据：  收 [{}]  ma： [{}] ", bar.contract().unifiedSymbol(), bar.closePrice(), maIndicator.value(0));
         switch (ctx.getState()) {
             case EMPTY -> {
+                mindirectionEnum = DirectionEnum.NON;
                 if (isBuyOpen(bar)) {
                     logger.info("做多 {} K线数据：  收 [{}] 指标方向: maxCycle [{}] ,连续数{}、  minCycle [{}] 连续数{} 、 ma： [{}] ",
                             bar.contract().unifiedSymbol(), bar.closePrice(), maxCycleRuleIndicator.getDirectionEnum(), maxCycleRuleIndicator.continuousDirectionCount(), minCycleRuleIndicator.getDirectionEnum(), minCycleRuleIndicator.continuousDirectionCount(), maIndicator.value(0));
@@ -109,10 +115,19 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
         if (longPos > 0) {
             if (maxCycleRuleIndicator.getDirectionEnum().isUPing()) {
                 if (minCycleRuleIndicator.getDirectionEnum().isDowning()) {
+                    mindirectionEnum = minCycleRuleIndicator.getDirectionEnum();
                     double costPrice = buyTrade.stream().mapToDouble(Trade::price).sum() / buyTrade.size();
                     if (bar.closePrice() > costPrice + params.smallPeriodTakeProfitMinPoints) {
                         helper.doSellClose(longPos);
                         logger.info("小周期bar止盈 平多 现价{}，成本价{} ,小周期数据 {}", bar.closePrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
+                    }
+                }
+//                之前出现过反方向 抓住止盈机会
+                if (mindirectionEnum != null && mindirectionEnum.isDowning() && minCycleRuleIndicator.getDirectionEnum().isUPing()) {
+                    double costPrice = buyTrade.stream().mapToDouble(Trade::price).sum() / buyTrade.size();
+                    if (bar.closePrice() > costPrice + params.smallPeriodTakeProfitMinPoints) {
+                        helper.doSellClose(longPos);
+                        logger.info("小周期bar反方向  平多 现价{}，成本价{} ,小周期数据 {}", bar.closePrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
                     }
                 }
                 if (minStopIndicator.getDirectionEnum().isDowning()) {
@@ -133,12 +148,22 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
         if (shortPos > 0) {
             if (maxCycleRuleIndicator.getDirectionEnum().isDowning()) {
                 if (minCycleRuleIndicator.getDirectionEnum().isUPing()) {
+                    mindirectionEnum = minCycleRuleIndicator.getDirectionEnum();
                     double costPrice = sellTrade.stream().mapToDouble(Trade::price).sum() / sellTrade.size();
                     if (bar.closePrice() < costPrice - params.smallPeriodTakeProfitMinPoints) {
                         logger.info("小周期bar止盈 平空 现价{}，成本价{} ,小周期数据 {}", bar.closePrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
                         helper.doBuyClose(shortPos);
                     }
                 }
+                // 之前出现过反方向 抓住止盈机会
+                if (mindirectionEnum != null && mindirectionEnum.isUPing() && minCycleRuleIndicator.getDirectionEnum().isDowning()) {
+                    double costPrice = sellTrade.stream().mapToDouble(Trade::price).sum() / sellTrade.size();
+                    if (bar.closePrice() < costPrice - params.smallPeriodTakeProfitMinPoints) {
+                        logger.info("小周期bar反方向 止盈 平空 现价{}，成本价{} ,小周期数据 {}", bar.closePrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
+                        helper.doBuyClose(shortPos);
+                    }
+                }
+
                 if (minStopIndicator.getDirectionEnum().isUPing()) {
                     helper.doBuyClose(shortPos);
                     logger.info("小周期bar止损 平多 现价{}，小周期数据 {}", bar.closePrice(), minStopIndicator.value(0));
