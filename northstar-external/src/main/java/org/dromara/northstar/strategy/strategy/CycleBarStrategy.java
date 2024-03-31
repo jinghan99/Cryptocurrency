@@ -1,5 +1,10 @@
 package org.dromara.northstar.strategy.strategy;
 
+import cn.hutool.core.date.DateField;
+import cn.hutool.core.date.DateTime;
+import cn.hutool.core.date.DateUnit;
+import cn.hutool.core.date.DateUtil;
+import org.apache.commons.lang3.time.DateUtils;
 import org.dromara.northstar.common.constant.FieldType;
 import org.dromara.northstar.common.model.DynamicParams;
 import org.dromara.northstar.common.model.Setting;
@@ -38,6 +43,11 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
     private CycleRuleIndicator maxCycleRuleIndicator;
     private CycleRuleIndicator minCycleRuleIndicator;
 
+    /**
+     * 小周期 止损
+     */
+    private CycleRuleIndicator minStopIndicator;
+
     private Indicator maIndicator;
 
     private InitParams params;    // 策略的参数配置信息
@@ -47,6 +57,8 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
 
     private TradeHelper helper;
 
+
+    private DateTime startTime;
 
     @Override
     public String name() {
@@ -58,13 +70,20 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
         logger.debug("{} K线数据： 开 [{}], 高 [{}], 低 [{}], 收 [{}]",
                 bar.contract().unifiedSymbol(), bar.openPrice(), bar.highPrice(), bar.lowPrice(), bar.closePrice());
         // 确保指标已经准备好再开始交易
-        boolean allLineReady = maxCycleRuleIndicator.isReady() && minCycleRuleIndicator.isReady() && maIndicator.isReady();
+        boolean allLineReady = maxCycleRuleIndicator.isReady() && minCycleRuleIndicator.isReady() && maIndicator.isReady() && minStopIndicator.isReady();
         if (!allLineReady) {
             logger.debug("指标未准备就绪");
             return;
         }
+        if (startTime == null) {
+            startTime = DateUtil.date();
+        }
+        if (startTime.offset(DateField.MINUTE, params.warmUpTimeMin).isAfter(DateUtil.date())) {
+            logger.info("预热中");
+            return;
+        }
         logger.info("大周期方向: {}，连续数{} ", maxCycleRuleIndicator.getDirectionEnum(), maxCycleRuleIndicator.continuousDirectionCount());
-        logger.info("小周期方向: {}，连续数{} , 数据 {}", minCycleRuleIndicator.getDirectionEnum(), minCycleRuleIndicator.continuousDirectionCount(), minCycleRuleIndicator.getDataByAsc());
+        logger.info("数据 {}", minCycleRuleIndicator.getDataByAsc());
         logger.info("{} K线数据：  收 [{}]  ma： [{}] ", bar.contract().unifiedSymbol(), bar.closePrice(), maIndicator.value(0));
         switch (ctx.getState()) {
             case EMPTY -> {
@@ -96,6 +115,10 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
                         logger.info("小周期bar止盈 平多 现价{}，成本价{} ,小周期数据 {}", bar.closePrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
                     }
                 }
+                if (minStopIndicator.getDirectionEnum().isDowning()) {
+                    helper.doSellClose(longPos);
+                    logger.info("小周期bar止损 平多 现价{}，小周期数据 {}", bar.closePrice(), minStopIndicator.value(0));
+                }
             }
             if (maxCycleRuleIndicator.getDirectionEnum().isDowning()) {
                 logger.info("止损平多做空 {}", bar.closePrice());
@@ -112,9 +135,13 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
                 if (minCycleRuleIndicator.getDirectionEnum().isUPing()) {
                     double costPrice = sellTrade.stream().mapToDouble(Trade::price).sum() / sellTrade.size();
                     if (bar.closePrice() < costPrice - params.smallPeriodTakeProfitMinPoints) {
-                        logger.info("小周期tick止盈 平空 现价{}，成本价{} ,小周期数据 {}", bar.closePrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
+                        logger.info("小周期bar止盈 平空 现价{}，成本价{} ,小周期数据 {}", bar.closePrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
                         helper.doBuyClose(shortPos);
                     }
+                }
+                if (minStopIndicator.getDirectionEnum().isUPing()) {
+                    helper.doBuyClose(shortPos);
+                    logger.info("小周期bar止损 平多 现价{}，小周期数据 {}", bar.closePrice(), minStopIndicator.value(0));
                 }
             }
             if (maxCycleRuleIndicator.getDirectionEnum().isUPing()) {
@@ -159,16 +186,26 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
                 .valueType(ValueType.CLOSE)
                 .numOfUnits(params.minMinute).build(), params.minPeriod);
 
+
+        this.minStopIndicator = new CycleRuleIndicator(Configuration.builder()
+                .contract(c)
+                .indicatorName("Cycle_stop_" + params.minStopPeriod)
+                .valueType(ValueType.CLOSE)
+                .numOfUnits(params.minMinute).build(), params.minStopPeriod);
+
+
         this.maIndicator = new MAIndicator(Configuration.builder()
                 .contract(c)
                 .indicatorName("ma_" + params.maLen)
                 .valueType(ValueType.CLOSE)
                 .numOfUnits(ctx.numOfMinPerMergedBar()).build(), params.maLen);
 
+
         logger = ctx.getLogger(getClass());
         // 指标的注册
         ctx.registerIndicator(maxCycleRuleIndicator);
         ctx.registerIndicator(minCycleRuleIndicator);
+        ctx.registerIndicator(minStopIndicator);
         ctx.registerIndicator(maIndicator);
         // 指标的注册
         helper = TradeHelper.builder().context(getContext()).tradeContract(c).build();
@@ -207,7 +244,7 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
     public static class InitParams extends DynamicParams {
 
         @Setting(label = "大周期", type = FieldType.NUMBER, order = 0)
-        private int maxPeriod = 75;
+        private int maxPeriod = 60;
 
         @Setting(label = "大周期MA均线", type = FieldType.NUMBER, order = 1)
         private int maLen = 90;
@@ -221,8 +258,14 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
         @Setting(label = "小周期止盈周期", type = FieldType.NUMBER, order = 4)
         private int minPeriod = 6;
 
-        @Setting(label = "小周期止盈最小点数", type = FieldType.NUMBER, order =5)
+        @Setting(label = "小周期止盈最小点数", type = FieldType.NUMBER, order = 5)
         private double smallPeriodTakeProfitMinPoints = 0.0002;
+
+        @Setting(label = "小周期止损周期", type = FieldType.NUMBER, order = 6)
+        private int minStopPeriod = 30;
+
+        @Setting(label = "预热时间分钟", type = FieldType.NUMBER, order = 7)
+        private int warmUpTimeMin = 10;
 
 
     }
