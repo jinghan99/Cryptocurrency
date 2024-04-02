@@ -10,7 +10,7 @@
         <el-form-item label="密码">
           <el-input type="password" v-model="userForm.pass" autocomplete="off" clearable></el-input>
         </el-form-item>
-        <el-form-item  label="服务端地址">
+        <el-form-item v-if="showHost" label="服务端地址">
           <el-input autocomplete placeholder="域名或IP地址" v-model="domain"/>
         </el-form-item>
         <el-form-item>

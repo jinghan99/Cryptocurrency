@@ -1,8 +1,8 @@
 {
   "name": "northstar-monitor",
-  "version": "7.0.1",
+  "version": "7.1.0",
   "private": true,
-  "mai n": "electron/main.js",
+  "main": "electron/main.js",
   "scripts": {
     "start": "npm run serve",
     "start:client": "electron .",

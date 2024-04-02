@@ -124,7 +124,7 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
                     double costPrice = buyTrade.stream().mapToDouble(Trade::price).sum() / buyTrade.size();
                     if (bar.closePrice() > costPrice + params.smallPeriodTakeProfitMinPoints) {
                         helper.doSellClose(longPos);
-                        logger.info("小周期bar反方向  平多 现价{}，成本价{} ,小周期数据 {}", bar.closePrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
+                        logger.info("onMergedBar 小周期bar反方向  平多 现价{}，成本价{} ,小周期数据 {}", bar.closePrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
                     }
                 }
                 if (minStopIndicator.getDirectionEnum().isDowning()) {
@@ -156,7 +156,7 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
                 if (mindirectionEnum != null && mindirectionEnum.isUPing() && minCycleRuleIndicator.getDirectionEnum().isDowning()) {
                     double costPrice = sellTrade.stream().mapToDouble(Trade::price).sum() / sellTrade.size();
                     if (bar.closePrice() < costPrice - params.smallPeriodTakeProfitMinPoints) {
-                        logger.info("小周期bar反方向 止盈 平空 现价{}，成本价{} ,小周期数据 {}", bar.closePrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
+                        logger.info("onMergedBar 小周期bar反方向 止盈 平空 现价{}，成本价{} ,小周期数据 {}", bar.closePrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
                         helper.doBuyClose(shortPos);
                     }
                 }
@@ -180,6 +180,31 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
     @Override
     public void onTick(Tick tick) {
         logger.debug("时间：{} {} 价格：{} ", tick.actionDay(), tick.actionTime(), tick.lastPrice());
+        Contract c = ctx.getContract(bindedContracts().getFirst().getUnifiedSymbol());
+        int longPos = ctx.getModuleAccount().getNonclosedPosition(c, CoreEnum.DirectionEnum.D_Buy);
+        int shortPos = ctx.getModuleAccount().getNonclosedPosition(c, CoreEnum.DirectionEnum.D_Sell);
+        List<Trade> buyTrade = ctx.getModuleAccount().getNonclosedTrades(c, CoreEnum.DirectionEnum.D_Buy);
+        List<Trade> sellTrade = ctx.getModuleAccount().getNonclosedTrades(c, CoreEnum.DirectionEnum.D_Sell);
+        if (longPos > 0) {
+            // 之前出现过反方向 抓住止盈机会
+            if (mindirectionEnum != null && mindirectionEnum.isDowning() && minCycleRuleIndicator.getDirectionEnum().isUPing()) {
+                double costPrice = buyTrade.stream().mapToDouble(Trade::price).sum() / buyTrade.size();
+                if (tick.lastPrice() > costPrice + params.smallPeriodTakeProfitMinPoints) {
+                    helper.doSellClose(longPos);
+                    logger.info("onTick 小周期bar反方向  平多 现价{}，成本价{} ,小周期数据 {}", tick.lastPrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
+                }
+            }
+        }
+        if (shortPos > 0) {
+            // 之前出现过反方向 抓住止盈机会
+            if (mindirectionEnum != null && mindirectionEnum.isUPing() && minCycleRuleIndicator.getDirectionEnum().isDowning()) {
+                double costPrice = sellTrade.stream().mapToDouble(Trade::price).sum() / sellTrade.size();
+                if (tick.lastPrice() < costPrice - params.smallPeriodTakeProfitMinPoints) {
+                    logger.info("onTick 小周期bar反方向 止盈 平空 现价{}，成本价{} ,小周期数据 {}", tick.lastPrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
+                    helper.doBuyClose(shortPos);
+                }
+            }
+        }
     }
 
     @Override
