@@ -80,9 +80,6 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
             logger.debug("指标未准备就绪");
             return;
         }
-        if (startTime == null) {
-            startTime = DateUtil.date();
-        }
         if (startTime.offset(DateField.MINUTE, params.warmUpTimeMin).isAfter(DateUtil.date())) {
             logger.info("预热中");
             return;
@@ -234,6 +231,9 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
         ctx.registerIndicator(maIndicator);
         // 指标的注册
         helper = TradeHelper.builder().context(getContext()).tradeContract(c).build();
+        // 开启时间
+        startTime = DateUtil.date().offset(DateField.MINUTE, params.warmUpTimeMin);
+        logger.info("策略开始时间：{}", startTime);
     }
 
     @Override

@@ -5,7 +5,7 @@ server:
     key-store: classpath:keystore/northstarKeyStore.p12
     key-store-password: northstar666
 northstar: 
-  socketio: 51688
+  socketio: 51680
   data-service:
     baseUrl: https://service.quantit.tech:443
     
