@@ -1,40 +1,48 @@
-项目导入后，要设置maven环境。
-Maven运行环境在环境安装脚本执行时已准备好，在 C:\northstar-env目录下。
+### 记录策略运行胜率：
 
-导入northstar-external外置策略项目
-   首先要确保对 northstar 项目执行过 mvn install
-   mvn安装
+### CycleBarStrategy
+      1分钟周期 3.30 21:21
+      模拟 bar_6090_0704 胜率：85.7%，交易笔数 7 
+      模拟 bar_6080_0704 胜率：83.3%，交易笔数 12
+      模拟 bar_6070_0704 胜率：83.3%，交易笔数 12
+      模拟 bar_7590_0704 胜率：71.4%，交易笔数 7
 
-然后便可以根据模板创建一个 northstar-external 项目 创建项目
+   
 
-第一个红框：填项目名称，northstar-external
-第二个红框：选择模板项目及模板项目版本，如果没有archetype，在确保已经执行过 mvn install 的前提下，可添加对应的archetype文件（在你的.m2/repository目录下）
-第三个红框：填 northstar-external 项目的GAV坐标：
-ArtifactId必须是 northstar-external
-Version要与 Northtsar 主项目一致
-创建好后，检查新项目的 pom.xml
-如果发现像下图情况，${northstarVersion} 这个变量没有被成功赋值，请手动替换成具体的主项目版本号 pom文件检查
+### CycleTickStrategy
+    5分钟周期 3.30 21:21
+      实盘 5——1518小周期0702 胜率：62.5%，交易笔数 16  
+      模拟 5——1518小周期0702 胜率：50%，交易笔数 28
+      模拟 5_1518小周期0606 胜率：56.7%，交易笔数 30
+      模拟 5_1518小周期0605 胜率：54.2%，交易笔数 24
+      模拟 5_1518小周期0604 胜率：54.2%，交易笔数 24
+      模拟 5_1518小周期0603 胜率：56%，交易笔数 25
+      模拟 5_1518小周期0702 胜率：50%，交易笔数 28
+      模拟 5_1518小周期0703 胜率：41.4%，交易笔数 29
 
-手动修改版本号后，需要 reload 一下项目才会生效 IDEA刷新项目
+EWYPtt1X0jaiVWDvI0NfabKQzeScg2xA9QblgVbAayQ8XdLpnobYVRODw70tkWGI
+EhP6akZrVEJDayjN6K1Xcor3UCuZkagUxqHqzoZNdJsH6jkyctbgIDX4pyFtePFk
 
-#3. 设置以上两项目的依赖关系
-到此为止，northstar 与 northstar-external 项目还是相互独立的两个项目。还需要一些设置来建立依赖关系。 IDEA项目依赖设置
+2024.3.31
+### CycleBarStrategy
+    实盘Bar 60_90_0604_0.0005   胜率 77.8   交易笔数 9  WIFUSDT
+    模拟bar_6090_0704           胜率：44.4  交易笔数 9  PYTHUSDT
+    模拟bar_6090_0704          胜率：84.6  交易笔数 9  WIFUSDT
+### CycleTickStrategy
+    实盘5_1518小周期0702 胜率：22.2%，交易笔数 18 PYTHUSDT
 
-TIP
+2024.4.2 11.52
+### CycleBarStrategy
+    1分钟周期
+    模拟bar_100120  胜率 60.99%     交易笔数 23     年化 59 %     100_120_1_3_6_0.0002_30_10
+    模拟bar_2140    胜率64.2        交易笔数 53     年化 16 %     21_40_1_3_6_0.0002_30_10
+    模拟bar_2150    胜率62.7%       交易笔数 23     年化 13 %     21_50_1_3_6_0.0002_30_10
+    模拟bar_30      胜率62.9%       交易笔数 35     年化 59 %     30_90_1_3_6_0.0002_30_10
+    模拟bar_3050    胜率62.2%       交易笔数 35     年化 48 %     30_50_1_3_6_0.0002_30_10
+    模拟bar_3060    胜率62.2%       交易笔数 37     年化 45 %     30_60_1_3_6_0.0002_30_10
+    模拟bar_60      胜率65.4%       交易笔数 26     年化  80%     60_90_1_3_6_0.0002_30_10
+    模拟bar_7590    胜率65.2%       交易笔数 23     年化  73%     75_90_1_3_6_0.0002_30_10
+    模拟bar_8090    胜率60.9%       交易笔数 23     年化  70%     80_90_1_3_6_0.0002_30_10
 
-注意：northstar-external 要设置为 northstar-main 的 dependencies，scope为 runtime
-
-### 添加services springboot 显示端口
-
-```angular2html
- <component name="RunDashboard">
-  <option name="configurationTypes">
-    <set>
-      <option value="SpringBootApplicationConfigurationType" />
-    </set>
-  </option>
-</component>
-```
-```shell
-java  -jar "-Dloader.path=$(pwd)"  "-Dhttp.proxyHost=127.0.0.1" "-Dhttp.proxyPort=10810" "-Dhttps.proxyHost=127.0.0.1" "-Dhttps.proxyPort=10810" "-Dfile.encoding=UTF-8"   -Denv=dev northstar-7.1.0.jar  
-```
+2024.4.2 11.52 开启
+### CycleBarStrategy

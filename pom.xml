@@ -1,24 +1,21 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
-    <parent>
-        <artifactId>spring-boot-starter-parent</artifactId>
-        <groupId>org.springframework.boot</groupId>
-        <version>3.2.0</version>
-    </parent>
-    <groupId>org.dromara</groupId>
-    <artifactId>northstar</artifactId>
-    <version>${revision}</version>
-    <name>cryptocurrency</name>
-    <packaging>pom</packaging>
-    <description>量化交易平台</description>
-    <url>https://gitee.com/dromara/northstar</url>
-
-    <modules>
-        <module>northstar-external-archetype</module>
-        <module>northstar-strategy-example</module>
-        <module>northstar-external</module>
-    </modules>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>org.dromara</groupId>
+  <artifactId>jh-strategy</artifactId>
+  <version>1.0</version>
+  <properties>
+  	<java.version>21</java.version>
+	<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+	<maven.compiler.encoding>UTF-8</maven.compiler.encoding>
+	<maven.compiler.source>${java.version}</maven.compiler.source>
+	<maven.compiler.target>${java.version}</maven.compiler.target>
+  </properties>
+  <dependencies>
+  	<dependency>
+		<groupId>org.dromara</groupId>
+		<artifactId>northstar-api</artifactId>
+		<version>7.1.0</version>
+	</dependency>
+  </dependencies>
 </project>
