@@ -80,10 +80,10 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
             logger.debug("指标未准备就绪");
             return;
         }
-        if (startTime.offset(DateField.MINUTE, params.warmUpTimeMin).isAfter(DateUtil.date())) {
-            logger.info("预热中");
-            return;
-        }
+//        if (startTime.offset(DateField.MINUTE, params.warmUpTimeMin).isAfter(DateUtil.date())) {
+////            logger.info("预热中");
+////            return;
+////        }
         logger.info("大周期方向: {}，连续数{} ", maxCycleRuleIndicator.getDirectionEnum(), maxCycleRuleIndicator.continuousDirectionCount());
         logger.info("数据 {}", minCycleRuleIndicator.getDataByAsc());
         logger.info("{} K线数据：  收 [{}]  ma： [{}] ", bar.contract().unifiedSymbol(), bar.closePrice(), maIndicator.value(0));
