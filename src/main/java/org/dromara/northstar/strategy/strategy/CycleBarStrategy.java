@@ -18,11 +18,13 @@ import org.dromara.northstar.indicator.Indicator;
 import org.dromara.northstar.indicator.constant.ValueType;
 import org.dromara.northstar.indicator.model.Configuration;
 import org.dromara.northstar.indicator.trend.MAIndicator;
+import org.dromara.northstar.indicator.volume.ExpandedVolumeThresholdIndicator;
 import org.dromara.northstar.strategy.AbstractStrategy;
 import org.dromara.northstar.strategy.StrategicComponent;
 import org.dromara.northstar.strategy.TradeStrategy;
 import org.dromara.northstar.strategy.constant.DirectionEnum;
 import org.dromara.northstar.strategy.indicator.CycleRuleIndicator;
+import org.dromara.northstar.strategy.indicator.CycleVolumeIndicator;
 import org.slf4j.Logger;
 import xyz.redtorch.pb.CoreEnum;
 
@@ -41,14 +43,23 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
 
 
     private CycleRuleIndicator maxCycleRuleIndicator;
+
+
     private CycleRuleIndicator minCycleRuleIndicator;
 
     /**
      * 小周期 止损
      */
     private CycleRuleIndicator minStopIndicator;
+    private CycleVolumeIndicator cycleVolumeIndicator;
+
 
     private Indicator maIndicator;
+
+    /**
+     * 权重指标
+     */
+    private CycleRuleIndicator weightIndicator;
 
     private InitParams params;    // 策略的参数配置信息
 
@@ -56,9 +67,6 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
     private Logger logger;
 
     private TradeHelper helper;
-
-
-    private DateTime startTime;
 
     /**
      * 记录差异的值
@@ -80,15 +88,12 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
             logger.debug("指标未准备就绪");
             return;
         }
-//        if (startTime.offset(DateField.MINUTE, params.warmUpTimeMin).isAfter(DateUtil.date())) {
-////            logger.info("预热中");
-////            return;
-////        }
         logger.info("大周期方向: {}，连续数{} ", maxCycleRuleIndicator.getDirectionEnum(), maxCycleRuleIndicator.continuousDirectionCount());
         logger.info("数据 {}", minCycleRuleIndicator.getDataByAsc());
         logger.info("{} K线数据：  收 [{}]  ma： [{}] ", bar.contract().unifiedSymbol(), bar.closePrice(), maIndicator.value(0));
         switch (ctx.getState()) {
             case EMPTY -> {
+                logger.debug("成交量突破 状态：{}", cycleVolumeIndicator.getDirectionEnum());
                 mindirectionEnum = DirectionEnum.NON;
                 if (isBuyOpen(bar)) {
                     logger.info("做多 {} K线数据：  收 [{}] 指标方向: maxCycle [{}] ,连续数{}、  minCycle [{}] 连续数{} 、 ma： [{}] ",
@@ -108,70 +113,93 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
         int shortPos = ctx.getModuleAccount().getNonclosedPosition(c, CoreEnum.DirectionEnum.D_Sell);
         List<Trade> buyTrade = ctx.getModuleAccount().getNonclosedTrades(c, CoreEnum.DirectionEnum.D_Buy);
         List<Trade> sellTrade = ctx.getModuleAccount().getNonclosedTrades(c, CoreEnum.DirectionEnum.D_Sell);
+        logger.info("仓位数据 多仓 {} 空仓{}", longPos, shortPos);
 //        持多仓
         if (longPos > 0) {
-            if (maxCycleRuleIndicator.getDirectionEnum().isUPing()) {
-                if (minCycleRuleIndicator.getDirectionEnum().isDowning()) {
-                    mindirectionEnum = minCycleRuleIndicator.getDirectionEnum();
-                    double costPrice = buyTrade.stream().mapToDouble(Trade::price).sum() / buyTrade.size();
-                    if (bar.closePrice() > costPrice + params.smallPeriodTakeProfitMinPoints) {
-                        helper.doSellClose(longPos);
-                        logger.info("小周期bar止盈 平多 现价{}，成本价{} ,小周期数据 {}", bar.closePrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
-                    }
-                }
-//                之前出现过反方向 抓住止盈机会
-                if (mindirectionEnum != null && mindirectionEnum.isDowning() && minCycleRuleIndicator.getDirectionEnum().isUPing()) {
-                    double costPrice = buyTrade.stream().mapToDouble(Trade::price).sum() / buyTrade.size();
-                    if (bar.closePrice() > costPrice + params.smallPeriodTakeProfitMinPoints) {
-                        helper.doSellClose(longPos);
-                        logger.info("onMergedBar 小周期bar反方向  平多 现价{}，成本价{} ,小周期数据 {}", bar.closePrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
-                    }
-                }
-                if (minStopIndicator.getDirectionEnum().isDowning()) {
-                    helper.doSellClose(longPos);
-                    logger.info("小周期bar止损 平多 现价{}，小周期数据 {}", bar.closePrice(), minStopIndicator.value(0));
-                }
-            }
-            if (maxCycleRuleIndicator.getDirectionEnum().isDowning()) {
-                logger.info("止损平多做空 {}", bar.closePrice());
-                helper.doSellClose(longPos);
-                if (isSellOpen(bar)) {
-                    helper.doSellOpen(ctx.getDefaultVolume());
-                }
-            }
+            doLongPos(bar, buyTrade, longPos);
             return;
         }
         // 持空仓
         if (shortPos > 0) {
-            if (maxCycleRuleIndicator.getDirectionEnum().isDowning()) {
-                if (minCycleRuleIndicator.getDirectionEnum().isUPing()) {
-                    mindirectionEnum = minCycleRuleIndicator.getDirectionEnum();
-                    double costPrice = sellTrade.stream().mapToDouble(Trade::price).sum() / sellTrade.size();
-                    if (bar.closePrice() < costPrice - params.smallPeriodTakeProfitMinPoints) {
-                        logger.info("小周期bar止盈 平空 现价{}，成本价{} ,小周期数据 {}", bar.closePrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
-                        helper.doBuyClose(shortPos);
-                    }
-                }
-                // 之前出现过反方向 抓住止盈机会
-                if (mindirectionEnum != null && mindirectionEnum.isUPing() && minCycleRuleIndicator.getDirectionEnum().isDowning()) {
-                    double costPrice = sellTrade.stream().mapToDouble(Trade::price).sum() / sellTrade.size();
-                    if (bar.closePrice() < costPrice - params.smallPeriodTakeProfitMinPoints) {
-                        logger.info("onMergedBar 小周期bar反方向 止盈 平空 现价{}，成本价{} ,小周期数据 {}", bar.closePrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
-                        helper.doBuyClose(shortPos);
-                    }
-                }
+            doShortPos(bar, sellTrade, shortPos);
+        }
+    }
 
-                if (minStopIndicator.getDirectionEnum().isUPing()) {
-                    helper.doBuyClose(shortPos);
-                    logger.info("小周期bar止损 平多 现价{}，小周期数据 {}", bar.closePrice(), minStopIndicator.value(0));
+    /**
+     * 处理做多仓位
+     *
+     * @param bar
+     * @param buyTrade
+     * @param longPos
+     */
+    private void doLongPos(Bar bar, List<Trade> buyTrade, int longPos) {
+        if (maxCycleRuleIndicator.getDirectionEnum().isUPing()) {
+            if (minCycleRuleIndicator.getDirectionEnum().isDowning()) {
+                mindirectionEnum = minCycleRuleIndicator.getDirectionEnum();
+                double costPrice = buyTrade.stream().mapToDouble(Trade::price).sum() / buyTrade.size();
+                if (bar.closePrice() > costPrice + params.smallPeriodTakeProfitMinPoints) {
+                    helper.doSellClose(longPos);
+                    logger.info("小周期bar止盈 平多 现价{}，成本价{} ,小周期数据 {}", bar.closePrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
                 }
             }
-            if (maxCycleRuleIndicator.getDirectionEnum().isUPing()) {
-                logger.info("止损平空做多 {}", bar.closePrice());
-                helper.doBuyClose(shortPos);
-                if (isBuyOpen(bar)) {
-                    helper.doBuyOpen(ctx.getDefaultVolume());
+//                之前出现过反方向 抓住止盈机会
+            if (mindirectionEnum != null && mindirectionEnum.isDowning() && minCycleRuleIndicator.getDirectionEnum().isUPing()) {
+                double costPrice = buyTrade.stream().mapToDouble(Trade::price).sum() / buyTrade.size();
+                if (bar.closePrice() > costPrice + params.smallPeriodTakeProfitMinPoints) {
+                    helper.doSellClose(longPos);
+                    logger.info("onMergedBar 小周期bar反方向  平多 现价{}，成本价{} ,小周期数据 {}", bar.closePrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
                 }
+            }
+            if (minStopIndicator.getDirectionEnum().isDowning()) {
+                helper.doSellClose(longPos);
+                logger.info("小周期bar止损 平多 现价{}，小周期数据 {}", bar.closePrice(), minStopIndicator.value(0));
+            }
+        }
+        if (maxCycleRuleIndicator.getDirectionEnum().isDowning()) {
+            logger.info("止损平多做空 {}", bar.closePrice());
+            helper.doSellClose(longPos);
+            if (isSellOpen(bar)) {
+                helper.doSellOpen(ctx.getDefaultVolume());
+            }
+        }
+    }
+
+
+    /**
+     * 处理做空仓位
+     *
+     * @param bar
+     * @param sellTrade
+     * @param shortPos
+     */
+    private void doShortPos(Bar bar, List<Trade> sellTrade, int shortPos) {
+        if (maxCycleRuleIndicator.getDirectionEnum().isDowning()) {
+            if (minCycleRuleIndicator.getDirectionEnum().isUPing()) {
+                mindirectionEnum = minCycleRuleIndicator.getDirectionEnum();
+                double costPrice = sellTrade.stream().mapToDouble(Trade::price).sum() / sellTrade.size();
+                if (bar.closePrice() < costPrice - params.smallPeriodTakeProfitMinPoints) {
+                    logger.info("小周期bar止盈 平空 现价{}，成本价{} ,小周期数据 {}", bar.closePrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
+                    helper.doBuyClose(shortPos);
+                }
+            }
+            // 之前出现过反方向 抓住止盈机会
+            if (mindirectionEnum != null && mindirectionEnum.isUPing() && minCycleRuleIndicator.getDirectionEnum().isDowning()) {
+                double costPrice = sellTrade.stream().mapToDouble(Trade::price).sum() / sellTrade.size();
+                if (bar.closePrice() < costPrice - params.smallPeriodTakeProfitMinPoints) {
+                    logger.info("onMergedBar 小周期bar反方向 止盈 平空 现价{}，成本价{} ,小周期数据 {}", bar.closePrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
+                    helper.doBuyClose(shortPos);
+                }
+            }
+            if (minStopIndicator.getDirectionEnum().isUPing()) {
+                helper.doBuyClose(shortPos);
+                logger.info("小周期bar止损 平多 现价{}，小周期数据 {}", bar.closePrice(), minStopIndicator.value(0));
+            }
+        }
+        if (maxCycleRuleIndicator.getDirectionEnum().isUPing()) {
+            logger.info("止损平空做多 {}", bar.closePrice());
+            helper.doBuyClose(shortPos);
+            if (isBuyOpen(bar)) {
+                helper.doBuyOpen(ctx.getDefaultVolume());
             }
         }
     }
@@ -220,6 +248,9 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
     @Override
     protected void initIndicators() {
         Contract c = ctx.getContract(bindedContracts().getFirst().getUnifiedSymbol());
+//        权重
+        Contract weightContract = ctx.getContract(params.weightSymbol);
+
         // 指标的创建
         this.maxCycleRuleIndicator = new CycleRuleIndicator(Configuration.builder()
                 .contract(c)
@@ -238,7 +269,7 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
                 .contract(c)
                 .indicatorName("Cycle_stop_" + params.minStopPeriod)
                 .valueType(ValueType.CLOSE)
-                .numOfUnits(params.minMinute).build(), params.minStopPeriod);
+                .numOfUnits(params.minMinute).build(), params.minStopPeriod, params.smallPeriodOpenDuration + 1);
 
 
         this.maIndicator = new MAIndicator(Configuration.builder()
@@ -248,17 +279,29 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
                 .numOfUnits(ctx.numOfMinPerMergedBar()).build(), params.maLen);
 
 
+        this.weightIndicator = new CycleRuleIndicator(Configuration.builder()
+                .contract(weightContract)
+                .indicatorName("weight_" + params.weightPeriod)
+                .valueType(ValueType.CLOSE)
+                .numOfUnits(ctx.numOfMinPerMergedBar()).build(), params.weightPeriod);
+
+        this.cycleVolumeIndicator = new CycleVolumeIndicator(Configuration.builder()
+                .contract(c)
+                .indicatorName("volume_" + params.volumeDeltaPeriod)
+                .valueType(ValueType.VOL_DELTA)
+                .numOfUnits(ctx.numOfMinPerMergedBar()).build(), params.volumeDeltaPeriod);
+
+
         logger = ctx.getLogger(getClass());
         // 指标的注册
         ctx.registerIndicator(maxCycleRuleIndicator);
         ctx.registerIndicator(minCycleRuleIndicator);
         ctx.registerIndicator(minStopIndicator);
         ctx.registerIndicator(maIndicator);
+        ctx.registerIndicator(weightIndicator);
+        ctx.registerIndicator(cycleVolumeIndicator);
         // 指标的注册
         helper = TradeHelper.builder().context(getContext()).tradeContract(c).build();
-        // 开启时间
-        startTime = DateUtil.date().offset(DateField.MINUTE, params.warmUpTimeMin);
-        logger.info("策略开始时间：{}", startTime);
     }
 
     @Override
@@ -277,17 +320,21 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
      * @return`·
      */
     private boolean isBuyOpen(Bar bar) {
-        return maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isUPing() && bar.closePrice() > maIndicator.value(0) && minCycleRuleIndicator.continuousDirectionCount() >= params.smallPeriodOpenDuration;
+        return maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isUPing()
+                && bar.closePrice() > maIndicator.value(0) && minCycleRuleIndicator.continuousDirectionCount() >= params.smallPeriodOpenDuration
+                && cycleVolumeIndicator.getDirectionEnum() == DirectionEnum.UP_BREAKTHROUGH;
     }
 
 
     /**
-     * 判断是否允许开空
+     * 判断是否允许开空 加入 btc 的 权重指标
      *
      * @return`·
      */
     private boolean isSellOpen(Bar bar) {
-        return maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isDowning() && bar.closePrice() < maIndicator.value(0) && minCycleRuleIndicator.continuousDirectionCount() >= params.smallPeriodOpenDuration;
+        return maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isDowning()
+                && bar.closePrice() < maIndicator.value(0) && minCycleRuleIndicator.continuousDirectionCount() >= params.smallPeriodOpenDuration
+                && weightIndicator.getDirectionEnum().isDowning()  && cycleVolumeIndicator.getDirectionEnum() == DirectionEnum.UP_BREAKTHROUGH;
     }
 
 
@@ -314,9 +361,15 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
         @Setting(label = "小周期止损周期", type = FieldType.NUMBER, order = 6)
         private int minStopPeriod = 30;
 
-        @Setting(label = "预热时间分钟", type = FieldType.NUMBER, order = 7)
-        private int warmUpTimeMin = 10;
+        @Setting(label = "权重指标合约", order = 7)
+        private String weightSymbol;
 
+
+        @Setting(label = "权重周期", type = FieldType.NUMBER, order = 8)
+        private int weightPeriod = 30;
+
+        @Setting(label = "成交量周期", type = FieldType.NUMBER, order = 9)
+        private int volumeDeltaPeriod = 15;
 
     }
 

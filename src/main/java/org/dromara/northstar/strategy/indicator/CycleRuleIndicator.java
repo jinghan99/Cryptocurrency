@@ -36,7 +36,14 @@ public class CycleRuleIndicator extends AbstractIndicator implements Indicator {
     public CycleRuleIndicator(Configuration cfg, int barCount) {
         super(cfg);
         close = new SimpleValueIndicator(cfg.toBuilder().valueType(ValueType.CLOSE).cacheLength(barCount).visible(false).build());
-        fixedSizeQueue = new FixedSizeQueue(barCount);
+        fixedSizeQueue = new FixedSizeQueue<>(barCount);
+    }
+
+
+    public CycleRuleIndicator(Configuration cfg, int barCount,int continuousCount) {
+        super(cfg);
+        close = new SimpleValueIndicator(cfg.toBuilder().valueType(ValueType.CLOSE).cacheLength(barCount).visible(false).build());
+        fixedSizeQueue = new FixedSizeQueue<>(continuousCount);
     }
 
 
