@@ -1,10 +1,5 @@
 package org.dromara.northstar.strategy.strategy;
 
-import cn.hutool.core.date.DateField;
-import cn.hutool.core.date.DateTime;
-import cn.hutool.core.date.DateUnit;
-import cn.hutool.core.date.DateUtil;
-import org.apache.commons.lang3.time.DateUtils;
 import org.dromara.northstar.common.constant.FieldType;
 import org.dromara.northstar.common.model.DynamicParams;
 import org.dromara.northstar.common.model.Setting;
@@ -18,7 +13,6 @@ import org.dromara.northstar.indicator.Indicator;
 import org.dromara.northstar.indicator.constant.ValueType;
 import org.dromara.northstar.indicator.model.Configuration;
 import org.dromara.northstar.indicator.trend.MAIndicator;
-import org.dromara.northstar.indicator.volume.ExpandedVolumeThresholdIndicator;
 import org.dromara.northstar.strategy.AbstractStrategy;
 import org.dromara.northstar.strategy.StrategicComponent;
 import org.dromara.northstar.strategy.TradeStrategy;
@@ -31,15 +25,15 @@ import xyz.redtorch.pb.CoreEnum;
 import java.util.List;
 
 /**
- * 周期法则策略
+ * 周期法则 成交量 匹配
  * <p>
  * * @author KevinHuangwl
  */
-@StrategicComponent(CycleBarStrategy.NAME)
-public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码，引入一个通用的基础抽象类
+@StrategicComponent(CycleVolumeStrategy.NAME)
+public class CycleVolumeStrategy extends AbstractStrategy    // 为了简化代码，引入一个通用的基础抽象类
         implements TradeStrategy {
 
-    protected static final String NAME = "jhCycleBar止盈法则策略";
+    protected static final String NAME = "周期法则-成交量策略";
 
 
     private CycleRuleIndicator maxCycleRuleIndicator;
@@ -56,10 +50,6 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
 
     private Indicator maIndicator;
 
-    /**
-     * 权重指标
-     */
-    private CycleRuleIndicator weightIndicator;
 
     private InitParams params;    // 策略的参数配置信息
 
@@ -89,18 +79,19 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
             return;
         }
         logger.info("大周期方向: {}，连续数{} ", maxCycleRuleIndicator.getDirectionEnum(), maxCycleRuleIndicator.continuousDirectionCount());
-        logger.info("数据 {}", minCycleRuleIndicator.getDataByAsc());
+        logger.info("小周期方向: {}，连续数{} ", minCycleRuleIndicator.getDirectionEnum(), minCycleRuleIndicator.continuousDirectionCount());
         logger.info("{} K线数据：  收 [{}]  ma： [{}] ", bar.contract().unifiedSymbol(), bar.closePrice(), maIndicator.value(0));
         switch (ctx.getState()) {
             case EMPTY -> {
-                logger.debug("成交量突破 状态：{}", cycleVolumeIndicator.getDirectionEnum());
                 mindirectionEnum = DirectionEnum.NON;
                 if (isBuyOpen(bar)) {
+                    logger.info("isBuyOpen 成交量方向突破持续数：{} ", cycleVolumeIndicator.getContinuousDirectionCount());
                     logger.info("做多 {} K线数据：  收 [{}] 指标方向: maxCycle [{}] ,连续数{}、  minCycle [{}] 连续数{} 、 ma： [{}] ",
                             bar.contract().unifiedSymbol(), bar.closePrice(), maxCycleRuleIndicator.getDirectionEnum(), maxCycleRuleIndicator.continuousDirectionCount(), minCycleRuleIndicator.getDirectionEnum(), minCycleRuleIndicator.continuousDirectionCount(), maIndicator.value(0));
                     helper.doBuyOpen(ctx.getDefaultVolume());
                 }
                 if (isSellOpen(bar)) {
+                    logger.info("isSellOpen 成交量方向突破持续数：{} ", cycleVolumeIndicator.getContinuousDirectionCount());
                     logger.info("做空 {} K线数据：  收 [{}] 指标方向: maxCycle [{}] ,连续数{}、  minCycle [{}] 连续数{} 、 ma： [{}] ",
                             bar.contract().unifiedSymbol(), bar.closePrice(), maxCycleRuleIndicator.getDirectionEnum(), maxCycleRuleIndicator.continuousDirectionCount(), minCycleRuleIndicator.getDirectionEnum(), minCycleRuleIndicator.continuousDirectionCount(), maIndicator.value(0));
                     helper.doSellOpen(ctx.getDefaultVolume());
@@ -159,6 +150,7 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
             logger.info("止损平多做空 {}", bar.closePrice());
             helper.doSellClose(longPos);
             if (isSellOpen(bar)) {
+                logger.info("isSellOpen 成交量方向突破持续数：{} ", cycleVolumeIndicator.getContinuousDirectionCount());
                 helper.doSellOpen(ctx.getDefaultVolume());
             }
         }
@@ -199,6 +191,7 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
             logger.info("止损平空做多 {}", bar.closePrice());
             helper.doBuyClose(shortPos);
             if (isBuyOpen(bar)) {
+                logger.info("isBuyOpen 成交量方向突破持续数：{} ", cycleVolumeIndicator.getContinuousDirectionCount());
                 helper.doBuyOpen(ctx.getDefaultVolume());
             }
         }
@@ -248,8 +241,6 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
     @Override
     protected void initIndicators() {
         Contract c = ctx.getContract(bindedContracts().getFirst().getUnifiedSymbol());
-//        权重
-        Contract weightContract = ctx.getContract(params.weightSymbol);
 
         // 指标的创建
         this.maxCycleRuleIndicator = new CycleRuleIndicator(Configuration.builder()
@@ -279,12 +270,6 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
                 .numOfUnits(ctx.numOfMinPerMergedBar()).build(), params.maLen);
 
 
-        this.weightIndicator = new CycleRuleIndicator(Configuration.builder()
-                .contract(weightContract)
-                .indicatorName("weight_" + params.weightPeriod)
-                .valueType(ValueType.CLOSE)
-                .numOfUnits(ctx.numOfMinPerMergedBar()).build(), params.weightPeriod);
-
         this.cycleVolumeIndicator = new CycleVolumeIndicator(Configuration.builder()
                 .contract(c)
                 .indicatorName("volume_" + params.volumeDeltaPeriod)
@@ -298,7 +283,6 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
         ctx.registerIndicator(minCycleRuleIndicator);
         ctx.registerIndicator(minStopIndicator);
         ctx.registerIndicator(maIndicator);
-        ctx.registerIndicator(weightIndicator);
         ctx.registerIndicator(cycleVolumeIndicator);
         // 指标的注册
         helper = TradeHelper.builder().context(getContext()).tradeContract(c).build();
@@ -322,20 +306,22 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
     private boolean isBuyOpen(Bar bar) {
         return maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isUPing()
                 && bar.closePrice() > maIndicator.value(0) && minCycleRuleIndicator.continuousDirectionCount() >= params.smallPeriodOpenDuration
-                && cycleVolumeIndicator.getDirectionEnum() == DirectionEnum.UP_BREAKTHROUGH;
+                && cycleVolumeIndicator.getContinuousDirectionCount() < params.volumeBreaksContinuous
+
+                ;
     }
 
 
     /**
-     * 判断是否允许开空 加入 btc 的 权重指标
+     * 判断是否允许开空
      *
      * @return`·
      */
     private boolean isSellOpen(Bar bar) {
         return maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isDowning()
                 && bar.closePrice() < maIndicator.value(0) && minCycleRuleIndicator.continuousDirectionCount() >= params.smallPeriodOpenDuration
-//                && weightIndicator.getDirectionEnum().isDowning()
-                && cycleVolumeIndicator.getDirectionEnum() == DirectionEnum.UP_BREAKTHROUGH;
+                && cycleVolumeIndicator.getContinuousDirectionCount() < params.volumeBreaksContinuous
+                ;
     }
 
 
@@ -362,15 +348,13 @@ public class CycleBarStrategy extends AbstractStrategy    // 为了简化代码�
         @Setting(label = "小周期止损周期", type = FieldType.NUMBER, order = 6)
         private int minStopPeriod = 30;
 
-        @Setting(label = "权重指标合约", order = 7)
-        private String weightSymbol;
-
-
-        @Setting(label = "权重周期", type = FieldType.NUMBER, order = 8)
-        private int weightPeriod = 30;
-
-        @Setting(label = "成交量周期", type = FieldType.NUMBER, order = 9)
+        @Setting(label = "成交量周期", type = FieldType.NUMBER, order =7)
         private int volumeDeltaPeriod = 15;
+
+
+        @Setting(label = "成交量突破数以内", type = FieldType.NUMBER, order = 8)
+        private int volumeBreaksContinuous = 3;
+
 
     }
 

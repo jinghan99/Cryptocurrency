@@ -32,7 +32,7 @@ public class CycleVolumeIndicator extends AbstractIndicator implements Indicator
     public CycleVolumeIndicator(Configuration cfg, int barCount) {
         super(cfg);
         close = new SimpleValueIndicator(cfg.toBuilder().valueType(ValueType.VOL_DELTA).cacheLength(barCount).visible(false).build());
-        fixedSizeQueue = new FixedSizeQueue<>(barCount);
+        fixedSizeQueue = new FixedSizeQueue<>(barCount * 3);
     }
 
 
@@ -49,6 +49,12 @@ public class CycleVolumeIndicator extends AbstractIndicator implements Indicator
     }
 
     protected Num evaluate(Num num) {
+        Num num1 = getNum(num);
+        fixedSizeQueue.add(directionEnum);
+        return num1;
+    }
+
+    private Num getNum(Num num) {
         if (!close.isReady()) {
             return Num.NaN();
         }
@@ -59,14 +65,12 @@ public class CycleVolumeIndicator extends AbstractIndicator implements Indicator
         double prevMaxHigh = prevList.stream().mapToDouble(Num::value) // 提取值
                 .max() // 计算最大值
                 .orElse(0); // 如果流为空，则返回0
-        double prevMinLow = prevList.stream().mapToDouble(Num::value) // 去除最后一位
-                .min() // 计算最小值
-                .orElse(0); // 如果流为空，则返回0
 //        向上突破
         if (price > prevMaxHigh) {
             directionEnum = DirectionEnum.UP_BREAKTHROUGH;
             return Num.of(price, num.timestamp());
         }
+        directionEnum = DirectionEnum.NON;
         return Num.of(prevMaxHigh, num.timestamp());
     }
 
@@ -76,6 +80,26 @@ public class CycleVolumeIndicator extends AbstractIndicator implements Indicator
 
     public double getMinLow() {
         return close.getData().stream().mapToDouble(Num::value).min().orElse(0);
+    }
+
+    /**
+     * 最近的 突破点
+     *
+     * @return
+     */
+    public int getContinuousDirectionCount() {
+        List<DirectionEnum> allInReverseOrder = fixedSizeQueue.getAllInReverseOrder();
+        if (allInReverseOrder.isEmpty()) {
+            return 0;
+        }
+        int count = 0;
+        for (int i = allInReverseOrder.size() - 1; i >= 0; i--) {
+            if (allInReverseOrder.get(i) == DirectionEnum.UP_BREAKTHROUGH) {
+                break;
+            }
+            count++;
+        }
+        return count;
     }
 
 }

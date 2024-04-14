@@ -36,11 +36,11 @@ public class CycleRuleIndicator extends AbstractIndicator implements Indicator {
     public CycleRuleIndicator(Configuration cfg, int barCount) {
         super(cfg);
         close = new SimpleValueIndicator(cfg.toBuilder().valueType(ValueType.CLOSE).cacheLength(barCount).visible(false).build());
-        fixedSizeQueue = new FixedSizeQueue<>(barCount);
+        fixedSizeQueue = new FixedSizeQueue<>(barCount * 3);
     }
 
 
-    public CycleRuleIndicator(Configuration cfg, int barCount,int continuousCount) {
+    public CycleRuleIndicator(Configuration cfg, int barCount, int continuousCount) {
         super(cfg);
         close = new SimpleValueIndicator(cfg.toBuilder().valueType(ValueType.CLOSE).cacheLength(barCount).visible(false).build());
         fixedSizeQueue = new FixedSizeQueue<>(continuousCount);
@@ -114,10 +114,11 @@ public class CycleRuleIndicator extends AbstractIndicator implements Indicator {
         DirectionEnum last = allInReverseOrder.get(size - 1);
         int count = 1;
         for (int i = allInReverseOrder.size() - 2; i >= 0; i--) {
-            if (last != allInReverseOrder.get(i)) {
+            if ((last.isDowning() && allInReverseOrder.get(i).isDowning()) || (last.isUPing() && allInReverseOrder.get(i).isUPing())) {
+                count++;
+            } else {
                 break;
             }
-            count++;
         }
         return count;
     }
