@@ -80,6 +80,7 @@ public class CycleVolumeStrategy extends AbstractStrategy    // 为了简化代�
         }
         logger.info("大周期方向: {}，连续数{} ", maxCycleRuleIndicator.getDirectionEnum(), maxCycleRuleIndicator.continuousDirectionCount());
         logger.info("小周期方向: {}，连续数{} ", minCycleRuleIndicator.getDirectionEnum(), minCycleRuleIndicator.continuousDirectionCount());
+        logger.info("成交量 方向突破持续数：{} ", cycleVolumeIndicator.getContinuousDirectionCount());
         logger.info("{} K线数据：  收 [{}]  ma： [{}] ", bar.contract().unifiedSymbol(), bar.closePrice(), maIndicator.value(0));
         switch (ctx.getState()) {
             case EMPTY -> {
