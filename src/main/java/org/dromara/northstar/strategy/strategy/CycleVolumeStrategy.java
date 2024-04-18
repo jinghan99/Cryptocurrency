@@ -208,23 +208,34 @@ public class CycleVolumeStrategy extends AbstractStrategy    // 为了简化代�
         List<Trade> buyTrade = ctx.getModuleAccount().getNonclosedTrades(c, CoreEnum.DirectionEnum.D_Buy);
         List<Trade> sellTrade = ctx.getModuleAccount().getNonclosedTrades(c, CoreEnum.DirectionEnum.D_Sell);
         if (longPos > 0) {
+            double costPrice = buyTrade.stream().mapToDouble(Trade::price).sum() / buyTrade.size();
             // 之前出现过反方向 抓住止盈机会
             if (mindirectionEnum != null && mindirectionEnum.isDowning() && minCycleRuleIndicator.getDirectionEnum().isUPing()) {
-                double costPrice = buyTrade.stream().mapToDouble(Trade::price).sum() / buyTrade.size();
                 if (tick.lastPrice() > costPrice + params.smallPeriodTakeProfitMinPoints) {
                     helper.doSellClose(longPos);
-                    logger.info("onTick 小周期bar反方向  平多 现价{}，成本价{} ,小周期数据 {}", tick.lastPrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
+                    logger.info("onTick 小周期bar反方向  平多 现价{}，成本价{} ", tick.lastPrice(), costPrice);
+                    return;
                 }
+            }
+            if (tick.lastPrice() > costPrice + params.smallPeriodSatisfiedPoints) {
+                helper.doSellClose(longPos);
+                logger.info("onTick 做多 止盈满意点数  平多 现价{}，成本价{} ", tick.lastPrice(), costPrice);
             }
         }
         if (shortPos > 0) {
+            double costPrice = sellTrade.stream().mapToDouble(Trade::price).sum() / sellTrade.size();
             // 之前出现过反方向 抓住止盈机会
             if (mindirectionEnum != null && mindirectionEnum.isUPing() && minCycleRuleIndicator.getDirectionEnum().isDowning()) {
-                double costPrice = sellTrade.stream().mapToDouble(Trade::price).sum() / sellTrade.size();
                 if (tick.lastPrice() < costPrice - params.smallPeriodTakeProfitMinPoints) {
-                    logger.info("onTick 小周期bar反方向 止盈 平空 现价{}，成本价{} ,小周期数据 {}", tick.lastPrice(), costPrice, minCycleRuleIndicator.getDataByAsc());
+                    logger.info("onTick 小周期bar反方向 止盈 平空 现价{}，成本价{} ", tick.lastPrice(), costPrice);
                     helper.doBuyClose(shortPos);
+                    return;
                 }
+            }
+            if (tick.lastPrice() < costPrice - params.smallPeriodSatisfiedPoints) {
+                logger.info("onTick 做空 止盈满意点数  平空 现价{}，成本价{}", tick.lastPrice(), costPrice);
+                helper.doBuyClose(shortPos);
+                return;
             }
         }
     }
@@ -343,19 +354,21 @@ public class CycleVolumeStrategy extends AbstractStrategy    // 为了简化代�
         @Setting(label = "小周期止盈周期", type = FieldType.NUMBER, order = 4)
         private int minPeriod = 6;
 
-        @Setting(label = "小周期止盈最小点数", type = FieldType.NUMBER, order = 5)
-        private double smallPeriodTakeProfitMinPoints = 0.0002;
-
-        @Setting(label = "小周期止损周期", type = FieldType.NUMBER, order = 6)
+        @Setting(label = "小周期止损周期", type = FieldType.NUMBER, order = 5)
         private int minStopPeriod = 30;
 
-        @Setting(label = "成交量周期", type = FieldType.NUMBER, order =7)
-        private int volumeDeltaPeriod = 15;
+        @Setting(label = "成交量周期", type = FieldType.NUMBER, order = 6)
+        private int volumeDeltaPeriod = 85;
 
 
-        @Setting(label = "成交量突破数以内", type = FieldType.NUMBER, order = 8)
+        @Setting(label = "成交量突破数以内", type = FieldType.NUMBER, order = 7)
         private int volumeBreaksContinuous = 3;
 
+        @Setting(label = "tick止盈最小点数", type = FieldType.NUMBER, order = 8)
+        private double smallPeriodTakeProfitMinPoints = 0.0002;
+
+        @Setting(label = "tick止盈满意点数", type = FieldType.NUMBER, order = 9)
+        private double smallPeriodSatisfiedPoints = 0.005;
 
     }
 

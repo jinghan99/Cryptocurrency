@@ -1,6 +1,7 @@
 package org.dromara.northstar.strategy.indicator;
 
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.dromara.northstar.indicator.AbstractIndicator;
 import org.dromara.northstar.indicator.Indicator;
 import org.dromara.northstar.indicator.constant.ValueType;
@@ -18,6 +19,7 @@ import java.util.List;
  *
  * @author KevinHuangwl
  */
+@Slf4j
 public class CycleVolumeIndicator extends AbstractIndicator implements Indicator {
 
 
@@ -58,7 +60,7 @@ public class CycleVolumeIndicator extends AbstractIndicator implements Indicator
         if (!close.isReady()) {
             return Num.NaN();
         }
-        double price = num.value();
+        double volume = num.value();
         List<Num> prevList = close.getData().stream()
                 .sorted(Comparator.comparingLong(Num::timestamp)) // 根据时间戳升序排序
                 .limit(close.getData().size() - 1).toList();
@@ -66,9 +68,9 @@ public class CycleVolumeIndicator extends AbstractIndicator implements Indicator
                 .max() // 计算最大值
                 .orElse(0); // 如果流为空，则返回0
 //        向上突破
-        if (price > prevMaxHigh) {
+        if (volume > prevMaxHigh) {
             directionEnum = DirectionEnum.UP_BREAKTHROUGH;
-            return Num.of(price, num.timestamp());
+            return Num.of(volume, num.timestamp());
         }
         directionEnum = DirectionEnum.NON;
         return Num.of(prevMaxHigh, num.timestamp());
