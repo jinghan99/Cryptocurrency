@@ -33,7 +33,7 @@ import java.util.List;
 public class CycleVolumeStrategy extends AbstractStrategy    // 为了简化代码，引入一个通用的基础抽象类
         implements TradeStrategy {
 
-    protected static final String NAME = "周期法则-成交量策略";
+    protected static final String NAME = "周期法则-成交量策略2";
 
 
     private CycleRuleIndicator maxCycleRuleIndicator;
