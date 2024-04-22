@@ -316,7 +316,7 @@ public class CycleVolumeStrategy extends AbstractStrategy    // 为了简化代�
      * @return`·
      */
     private boolean isBuyOpen(Bar bar) {
-        return maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.UP_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isUPing()
+        return maxCycleRuleIndicator.getDirectionEnum().isUPing() && minCycleRuleIndicator.getDirectionEnum().isUPing()
                 && bar.closePrice() > maIndicator.value(0) && minCycleRuleIndicator.continuousDirectionCount() >= params.smallPeriodOpenDuration
                 && cycleVolumeIndicator.getContinuousDirectionCount() < params.volumeBreaksContinuous
 
@@ -330,7 +330,7 @@ public class CycleVolumeStrategy extends AbstractStrategy    // 为了简化代�
      * @return`·
      */
     private boolean isSellOpen(Bar bar) {
-        return maxCycleRuleIndicator.getDirectionEnum() == DirectionEnum.DOWN_BREAKTHROUGH && minCycleRuleIndicator.getDirectionEnum().isDowning()
+        return maxCycleRuleIndicator.getDirectionEnum().isDowning() && minCycleRuleIndicator.getDirectionEnum().isDowning() && minStopIndicator.getDirectionEnum().isDowning()
                 && bar.closePrice() < maIndicator.value(0) && minCycleRuleIndicator.continuousDirectionCount() >= params.smallPeriodOpenDuration
                 && cycleVolumeIndicator.getContinuousDirectionCount() < params.volumeBreaksContinuous
                 ;
@@ -349,7 +349,7 @@ public class CycleVolumeStrategy extends AbstractStrategy    // 为了简化代�
         private int minMinute = 1;
 
         @Setting(label = "小周期开仓持续数", type = FieldType.NUMBER, order = 3)
-        private int smallPeriodOpenDuration = 3;
+        private int smallPeriodOpenDuration = 2;
 
         @Setting(label = "小周期止盈周期", type = FieldType.NUMBER, order = 4)
         private int minPeriod = 6;
@@ -358,17 +358,17 @@ public class CycleVolumeStrategy extends AbstractStrategy    // 为了简化代�
         private int minStopPeriod = 30;
 
         @Setting(label = "成交量周期", type = FieldType.NUMBER, order = 6)
-        private int volumeDeltaPeriod = 85;
+        private int volumeDeltaPeriod = 60;
 
 
         @Setting(label = "成交量突破数以内", type = FieldType.NUMBER, order = 7)
-        private int volumeBreaksContinuous = 3;
+        private int volumeBreaksContinuous = 5;
 
         @Setting(label = "tick止盈最小点数", type = FieldType.NUMBER, order = 8)
-        private double smallPeriodTakeProfitMinPoints = 0.0002;
+        private double smallPeriodTakeProfitMinPoints = 0.0003;
 
         @Setting(label = "tick止盈满意点数", type = FieldType.NUMBER, order = 9)
-        private double smallPeriodSatisfiedPoints = 0.005;
+        private double smallPeriodSatisfiedPoints = 0.01;
 
     }
 
