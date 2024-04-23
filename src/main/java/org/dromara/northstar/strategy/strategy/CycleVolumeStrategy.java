@@ -316,7 +316,7 @@ public class CycleVolumeStrategy extends AbstractStrategy    // 为了简化代�
      * @return`·
      */
     private boolean isBuyOpen(Bar bar) {
-        return maxCycleRuleIndicator.getDirectionEnum().isUPing() && minCycleRuleIndicator.getDirectionEnum().isUPing()
+        return maxCycleRuleIndicator.getDirectionEnum().isUPing() && minCycleRuleIndicator.getDirectionEnum().isUPing()  && minStopIndicator.getDirectionEnum().isUPing()
                 && bar.closePrice() > maIndicator.value(0) && minCycleRuleIndicator.continuousDirectionCount() >= params.smallPeriodOpenDuration
                 && cycleVolumeIndicator.getContinuousDirectionCount() < params.volumeBreaksContinuous
 
@@ -330,7 +330,7 @@ public class CycleVolumeStrategy extends AbstractStrategy    // 为了简化代�
      * @return`·
      */
     private boolean isSellOpen(Bar bar) {
-        return maxCycleRuleIndicator.getDirectionEnum().isDowning() && minCycleRuleIndicator.getDirectionEnum().isDowning() && minStopIndicator.getDirectionEnum().isDowning()
+        return maxCycleRuleIndicator.getDirectionEnum().isDowning() && minCycleRuleIndicator.getDirectionEnum().isDowning()  && minStopIndicator.getDirectionEnum().isDowning()
                 && bar.closePrice() < maIndicator.value(0) && minCycleRuleIndicator.continuousDirectionCount() >= params.smallPeriodOpenDuration
                 && cycleVolumeIndicator.getContinuousDirectionCount() < params.volumeBreaksContinuous
                 ;
