@@ -1,5 +1,6 @@
 package org.dromara.northstar.strategy.strategy;
 
+
 import org.dromara.northstar.common.constant.FieldType;
 import org.dromara.northstar.common.model.DynamicParams;
 import org.dromara.northstar.common.model.Setting;
