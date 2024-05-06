@@ -1,6 +1,5 @@
 package org.dromara.northstar.strategy.indicator;
 
-import cn.hutool.core.util.NumberUtil;
 import lombok.Getter;
 import org.dromara.northstar.indicator.AbstractIndicator;
 import org.dromara.northstar.indicator.Indicator;
@@ -8,12 +7,8 @@ import org.dromara.northstar.indicator.constant.ValueType;
 import org.dromara.northstar.indicator.helper.SimpleValueIndicator;
 import org.dromara.northstar.indicator.model.Configuration;
 import org.dromara.northstar.indicator.model.Num;
-import org.dromara.northstar.indicator.model.RingArray;
 import org.dromara.northstar.strategy.constant.DirectionEnum;
 import org.dromara.northstar.strategy.domain.FixedSizeQueue;
-
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
