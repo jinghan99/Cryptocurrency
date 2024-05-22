@@ -4,6 +4,7 @@ package org.dromara.northstar.strategy.strategy;
 import lombok.Setter;
 import org.dromara.northstar.common.constant.FieldType;
 import org.dromara.northstar.common.constant.ModuleType;
+import org.dromara.northstar.common.constant.SignalOperation;
 import org.dromara.northstar.common.model.DynamicParams;
 import org.dromara.northstar.common.model.Setting;
 import org.dromara.northstar.common.model.core.Bar;
@@ -13,6 +14,9 @@ import org.dromara.northstar.common.model.core.Trade;
 import org.dromara.northstar.common.utils.FieldUtils;
 import org.dromara.northstar.common.utils.TradeHelper;
 import org.dromara.northstar.indicator.Indicator;
+import org.dromara.northstar.indicator.constant.PeriodUnit;
+import org.dromara.northstar.indicator.constant.ValueType;
+import org.dromara.northstar.indicator.helper.SimpleValueIndicator;
 import org.dromara.northstar.indicator.model.Configuration;
 import org.dromara.northstar.indicator.trend.EMAIndicator;
 import org.dromara.northstar.indicator.trend.MAIndicator;
@@ -20,9 +24,16 @@ import org.dromara.northstar.indicator.volatility.TrueRangeIndicator;
 import org.dromara.northstar.strategy.AbstractStrategy;
 import org.dromara.northstar.strategy.StrategicComponent;
 import org.dromara.northstar.strategy.TradeStrategy;
+import org.dromara.northstar.strategy.constant.DirectionEnum;
+import org.dromara.northstar.strategy.constant.PriceType;
+import org.dromara.northstar.strategy.domain.FixedSizeQueue;
+import org.dromara.northstar.strategy.indicator.FundingRateIndicator;
+import org.dromara.northstar.strategy.model.TradeIntent;
 import org.slf4j.Logger;
 import xyz.redtorch.pb.CoreEnum;
 
+import java.time.Duration;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -46,26 +57,40 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
 
     protected static final String NAME = "套利策略-1.0";
 
-    private InitParams params;	// 策略的参数配置信息
+    private InitParams params;    // 策略的参数配置信息
 
     private Logger logger;
 
-    private TradeHelper hlp1;
+    private TradeHelper contractHelper;
 
-    private TradeHelper hlp2;
+    private TradeHelper spotTradeHelper;
 
-    private long nextActionTime;
+    private Indicator fundingRateIndicator;
 
-    private int holding;
+    final FixedSizeQueue<Tick> contractPriceQueue = new FixedSizeQueue<>(10);
+    final FixedSizeQueue<Tick> spotPriceQueue = new FixedSizeQueue<>(10);
+
+    private Tick contractTick;
+    private Tick spotTick;
 
     @Setter
     public static class InitParams extends DynamicParams {
 
-        @Setting(label="合约", order = 10)
-        private String unifiedSymbol1;
+        @Setting(label = "合约", order = 10)
+        private String contract;
 
-        @Setting(label="现货", order = 20)
+        @Setting(label = "合约费率id", order = 11)
+        private String contractInstId;
+
+        @Setting(label = "合约费率更新周期(分钟)", type = FieldType.NUMBER, order = 12)
+        private int updateInstIdMin = 20;
+
+        @Setting(label = "现货", order = 21)
         private String spot;
+
+        @Setting(label = "永续价格比现货高 差异值", type = FieldType.NUMBER, order = 22)
+        private double diff = 0.3;
+
 
     }
 
@@ -87,52 +112,94 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
 
     @Override
     protected void initIndicators() {
-        Contract c1 = ctx.getContract(params.unifiedSymbol1);
+        Contract c1 = ctx.getContract(params.contract);
         Contract c2 = ctx.getContract(params.spot);
+        this.fundingRateIndicator = new FundingRateIndicator(Configuration.builder().contract(c1).indicatorName("rate").period(PeriodUnit.MINUTE).numOfUnits(this.params.updateInstIdMin).build(), this.params.contractInstId, 20);
+        ctx.registerIndicator(fundingRateIndicator);
         logger = ctx.getLogger(getClass());
-        hlp1 = new TradeHelper(ctx, c1);
-        hlp2 = new TradeHelper(ctx, c2);
+        contractHelper = new TradeHelper(ctx, c1);
+        spotTradeHelper = new TradeHelper(ctx, c2);
     }
 
+    /**
+     * 发现永续价格比现货高而且永续的资金费为正 就下单
+     *
+     * @param tick
+     */
     @Override
     public void onTick(Tick tick) {
-        if(tick.contract().unifiedSymbol().equals(params.unifiedSymbol2)) {
+        if (tick.contract().unifiedSymbol().equals(params.spot)) {
+            spotPriceQueue.add(tick);
+            spotTick = tick;
+        }
+        if (tick.contract().unifiedSymbol().equals(params.contract)) {
+            contractPriceQueue.add(tick);
+            contractTick = tick;
+        }
+        extracted();
+
+    }
+
+
+    /**
+     * 执行 开仓逻辑
+     */
+    private void extracted() {
+        //        校验时间
+        if (!verifyDate()) {
             return;
         }
-        long now = tick.actionTimestamp();
-        // 启用后，等待10秒才开始交易
-        if(nextActionTime == 0) {
-            nextActionTime = now + 10000;
+//        资金费为小于0
+        if (fundingRateIndicator.value(0) <= 0) {
+            return;
         }
-        if(now > nextActionTime) {
-            nextActionTime = now + 60000;
-            logger.info("开始交易");
-            if(holding == 0) {
-                if(ThreadLocalRandom.current().nextBoolean()) {
-                    holding = 1;
-                    hlp1.doBuyOpen(1);
-                    hlp2.doSellOpen(1);
-                } else {
-                    holding = -1;
-                    hlp1.doSellOpen(1);
-                    hlp2.doBuyOpen(1);
-                }
-            } else {
-                if(holding > 0) {
-                    hlp1.doSellClose(1);
-                    hlp2.doBuyClose(1);
-                } else {
-                    hlp1.doBuyClose(1);
-                    hlp2.doSellClose(1);
-                }
-                holding = 0;
-            }
+
+        Contract c1 = ctx.getContract(params.contract);
+        Contract c2 = ctx.getContract(params.spot);
+//        合约 空仓
+        int shortContractPos = ctx.getModuleAccount().getNonclosedPosition(c1, CoreEnum.DirectionEnum.D_Sell);
+//        现货 多仓
+        int longSpot = ctx.getModuleAccount().getNonclosedPosition(c2, CoreEnum.DirectionEnum.D_Buy);
+
+        double diffPrice = contractTick.lastPrice() - spotTick.lastPrice();
+
+//       无持仓
+        if (shortContractPos <= 0 && longSpot <= 0 && diffPrice == this.params.diff) {
+            ctx.submitOrderReq(TradeIntent.builder()
+                    .contract(c1)
+                    .operation(SignalOperation.SELL_OPEN)
+                    .priceType(PriceType.LIMIT_PRICE)
+                    .price(contractTick.lastPrice())
+                    .volume(ctx.getDefaultVolume())
+                    .timeout(5000)
+                    .build());
+            logger.info("空开合约");
+            ctx.submitOrderReq(TradeIntent.builder()
+                    .contract(c1)
+                    .operation(SignalOperation.BUY_OPEN)
+                    .priceType(PriceType.LIMIT_PRICE)
+                    .price(spotTick.lastPrice())
+                    .volume(ctx.getDefaultVolume())
+                    .timeout(5000)
+                    .build());
+            logger.info("多开现货");
         }
+    }
+
+
+    /**
+     * 校验时间 两个时间是否小于 2 秒
+     *
+     * @return
+     */
+    public boolean verifyDate() {
+        Duration duration = Duration.between(contractTick.actionTime(), spotTick.actionTime());
+        return duration.toMillis() < 2000;
     }
 
     @Override
     public ModuleType type() {
-        return ModuleType.ARBITRAGE;	// 套利策略专有标识
+        return ModuleType.ARBITRAGE;    // 套利策略专有标识
     }
 
 }
