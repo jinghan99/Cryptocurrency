@@ -14,6 +14,7 @@ import org.dromara.northstar.indicator.Indicator;
 import org.dromara.northstar.indicator.constant.PeriodUnit;
 import org.dromara.northstar.indicator.constant.ValueType;
 import org.dromara.northstar.indicator.model.Configuration;
+import org.dromara.northstar.indicator.trend.EMAIndicator;
 import org.dromara.northstar.indicator.trend.MAIndicator;
 import org.dromara.northstar.indicator.volatility.TrueRangeIndicator;
 import org.dromara.northstar.strategy.AbstractStrategy;
@@ -29,11 +30,11 @@ import java.util.List;
  * 趋势均线策略
  * 我们采用日线的数据，并将在信号出现的下一个交易日完成买卖。之所以在下一个交易日进行交易，
  * 是为了防止出现所谓的“数据拣选”（data snooping）带来的偏差
- *
- *  如果将真实波动幅度均值乘以选定的期货合约的点价，我们可以得到在正常情况下一手期货合约日内价格的变动能产生多少损益。
- *  设定尾随止损（或称移动止损，Trailing-Stop）的位置，为简单起见，止损点为距开仓以来的最好价格相当于3个真实波动幅度均值的位置。
- *  所以对于我们的
- *  多仓来说，止损点在开仓后最高价之下3个真实波动幅度均值的位置，对于空仓则是开仓后最低价之上3个真实波动幅度均值的位置。
+ * <p>
+ * 如果将真实波动幅度均值乘以选定的期货合约的点价，我们可以得到在正常情况下一手期货合约日内价格的变动能产生多少损益。
+ * 设定尾随止损（或称移动止损，Trailing-Stop）的位置，为简单起见，止损点为距开仓以来的最好价格相当于3个真实波动幅度均值的位置。
+ * 所以对于我们的
+ * 多仓来说，止损点在开仓后最高价之下3个真实波动幅度均值的位置，对于空仓则是开仓后最低价之上3个真实波动幅度均值的位置。
  * * @author KevinHuangwl
  */
 @StrategicComponent(AveragesTrendStrategy.NAME)
@@ -42,14 +43,17 @@ public class AveragesTrendStrategy extends AbstractStrategy    // 为了简化�
 
     protected static final String NAME = "趋势均线策略-1.0";
 
-    private Indicator ma10Indicator;
-    private Indicator ma50Indicator;
-    private Indicator ma100Indicator;
-    private Indicator ma200Indicator;
+    private Indicator ema10;
+    private Indicator ema50;
+    private Indicator ema100;
+    private Indicator ema200;
 
-    Indicator trueRangeIndicator;
+    Indicator tr;
 
     Indicator atr;
+    Indicator trDay;
+
+    Indicator atrDay;
 
     private InitParams params;    // 策略的参数配置信息
 
@@ -76,8 +80,9 @@ public class AveragesTrendStrategy extends AbstractStrategy    // 为了简化�
 
     @Override
     public void onMergedBar(Bar bar) {
+        logger.info("时间：{} {} 价格：{} ", bar.tradingDay(), bar.actionTime(), bar.closePrice());
         // 确保指标已经准备好再开始交易
-        boolean allLineReady = trueRangeIndicator.isReady() && ma200Indicator.isReady() && ma100Indicator.isReady() && ma50Indicator.isReady() && ma10Indicator.isReady();
+        boolean allLineReady = tr.isReady() && ema200.isReady() && ema100.isReady() && ema50.isReady() && ema10.isReady();
         if (!allLineReady) {
             logger.debug("指标未准备就绪");
             return;
@@ -116,7 +121,6 @@ public class AveragesTrendStrategy extends AbstractStrategy    // 为了简化�
     }
 
 
-
     /**
      * 处理做多仓位
      * 多仓来说，止损点在开仓后最高价之下3个真实波动幅度均值的位置
@@ -129,7 +133,8 @@ public class AveragesTrendStrategy extends AbstractStrategy    // 为了简化�
         if (bar.closePrice() > openAfterMaxPrice) {
             openAfterMaxPrice = bar.closePrice();
         }
-        double stopPrice = openAfterMaxPrice - atr.value(0) * 3;
+        double stopPrice = openAfterMaxPrice - atr.value(0) * params.stopAtrMultiple;
+        logger.info("做多当前价{}： 开仓后最高价 {}，止损价：{}",bar.closePrice(),openAfterMaxPrice, stopPrice);
         if (bar.closePrice() < stopPrice) {
             helper.doSellClose(longPos);
         }
@@ -144,10 +149,11 @@ public class AveragesTrendStrategy extends AbstractStrategy    // 为了简化�
      * @param shortPos
      */
     private void doShortPos(Bar bar, List<Trade> sellTrade, int shortPos) {
-        if(bar.closePrice() < openAfterMinPrice){
+        if (bar.closePrice() < openAfterMinPrice) {
             openAfterMinPrice = bar.closePrice();
         }
-        double stopPrice = openAfterMinPrice + atr.value(0) * 3;
+        double stopPrice = openAfterMinPrice + atr.value(0) * params.stopAtrMultiple;
+        logger.info("做空当前价{}： 开仓后最低价 {}，止损价：{}",bar.closePrice(),openAfterMaxPrice, stopPrice);
         if (bar.closePrice() > stopPrice) {
             helper.doBuyClose(shortPos);
         }
@@ -160,12 +166,12 @@ public class AveragesTrendStrategy extends AbstractStrategy    // 为了简化�
      * @return`·
      */
     private boolean isBuyOpen(Bar bar) {
-        return bar.closePrice() > ma10Indicator.value(0)
-                && ma10Indicator.value(0) > ma50Indicator.value(0)
-                && ma10Indicator.value(0) > ma100Indicator.value(0)
-                && ma10Indicator.value(0) > ma200Indicator.value(0)
-                && ma50Indicator.value(0) > ma100Indicator.value(0)
-                && ma100Indicator.value(0) > ma200Indicator.value(0);
+        return bar.closePrice() > ema10.value(0)
+                && ema10.value(0) > ema50.value(0)
+                && ema10.value(0) > ema100.value(0)
+                && ema10.value(0) > ema200.value(0)
+                && ema50.value(0) > ema100.value(0)
+                && ema100.value(0) > ema200.value(0);
     }
 
 
@@ -175,12 +181,12 @@ public class AveragesTrendStrategy extends AbstractStrategy    // 为了简化�
      * @return`·
      */
     private boolean isSellOpen(Bar bar) {
-        return bar.closePrice() < ma10Indicator.value(0)
-                && ma10Indicator.value(0) < ma50Indicator.value(0)
-                && ma10Indicator.value(0) < ma100Indicator.value(0)
-                && ma10Indicator.value(0) < ma200Indicator.value(0)
-                && ma50Indicator.value(0) < ma100Indicator.value(0)
-                && ma100Indicator.value(0) < ma200Indicator.value(0)
+        return bar.closePrice() < ema10.value(0)
+                && ema10.value(0) < ema50.value(0)
+                && ema10.value(0) < ema100.value(0)
+                && ema10.value(0) < ema200.value(0)
+                && ema50.value(0) < ema100.value(0)
+                && ema100.value(0) < ema200.value(0)
                 ;
     }
 
@@ -204,40 +210,23 @@ public class AveragesTrendStrategy extends AbstractStrategy    // 为了简化�
     @Override
     protected void initIndicators() {
         Contract c = ctx.getContract(bindedContracts().getFirst().getUnifiedSymbol());
-
-        this.ma10Indicator = new MAIndicator(Configuration.builder()
-                .contract(c)
-                .indicatorName("ma_10")
-                .valueType(ValueType.CLOSE)
-                .numOfUnits(ctx.numOfMinPerMergedBar()).build(), 10);
-
-        this.ma50Indicator = new MAIndicator(Configuration.builder()
-                .contract(c)
-                .indicatorName("ma_50")
-                .valueType(ValueType.CLOSE)
-                .numOfUnits(ctx.numOfMinPerMergedBar()).build(), 50);
-
-        this.ma100Indicator = new MAIndicator(Configuration.builder()
-                .contract(c)
-                .indicatorName("ma_100")
-                .valueType(ValueType.CLOSE)
-                .numOfUnits(ctx.numOfMinPerMergedBar()).build(), 100);
-        this.ma200Indicator = new MAIndicator(Configuration.builder()
-                .contract(c)
-                .indicatorName("ma_200")
-                .valueType(ValueType.CLOSE)
-                .numOfUnits(ctx.numOfMinPerMergedBar()).build(), 200);
-
-        this.trueRangeIndicator = new TrueRangeIndicator( makeConfig("TR"));
-        this.atr = new MAIndicator(makeConfig("ATR"), trueRangeIndicator, params.atrLen);
-
+        this.ema10 = new EMAIndicator(makeConfig("EMA10"), 10);
+        this.ema50 = new EMAIndicator(makeConfig("EMA50"), 50);
+        this.ema100 = new EMAIndicator(makeConfig("EMA100"), 100);
+        this.ema200 = new EMAIndicator(makeConfig("EMA200"), 200);
+        this.tr = new TrueRangeIndicator(makeConfig("TR"));
+        this.atr = new MAIndicator(makeConfig("ATR"), tr, params.atrLen);
+        this.trDay = new TrueRangeIndicator(Configuration.builder().contract(c).indicatorName("tr_day").numOfUnits(60 * 23).build());
+        this.atrDay = new MAIndicator(Configuration.builder().contract(c).indicatorName("atr_day").numOfUnits(60 * 23).build(), trDay, params.atrLen);
         logger = ctx.getLogger(getClass());
-        ctx.registerIndicator(ma10Indicator);
-        ctx.registerIndicator(ma50Indicator);
-        ctx.registerIndicator(ma100Indicator);
-        ctx.registerIndicator(ma200Indicator);
-        ctx.registerIndicator(trueRangeIndicator);
+        ctx.registerIndicator(ema10);
+        ctx.registerIndicator(ema50);
+        ctx.registerIndicator(ema100);
+        ctx.registerIndicator(ema200);
+        ctx.registerIndicator(tr);
         ctx.registerIndicator(atr);
+        ctx.registerIndicator(trDay);
+        ctx.registerIndicator(atrDay);
         helper = TradeHelper.builder().context(getContext()).tradeContract(c).build();
     }
 
@@ -254,12 +243,16 @@ public class AveragesTrendStrategy extends AbstractStrategy    // 为了简化�
 
     public static class InitParams extends DynamicParams {
 
-        @Setting(label = "atr长度", type = FieldType.NUMBER, order = 2)
-        private int atrLen = 100;
+        @Setting(label = "atr长度", type = FieldType.NUMBER, order = 1)
+        private int atrLen = 20;
 
 
         @Setting(label = "风险因子", type = FieldType.NUMBER, order = 3)
         private double riskFactors = 0.002;
+
+//        ATR stop loss multiple
+        @Setting(label = "atr止损倍数", type = FieldType.NUMBER, order = 4)
+        private double stopAtrMultiple = 3;
 
 
     }
@@ -268,6 +261,4 @@ public class AveragesTrendStrategy extends AbstractStrategy    // 为了简化�
         Contract c = ctx.getContract(bindedContracts().getFirst().getUnifiedSymbol());
         return Configuration.builder().contract(c).indicatorName(name).numOfUnits(ctx.numOfMinPerMergedBar()).build();
     }
-
-
 }
