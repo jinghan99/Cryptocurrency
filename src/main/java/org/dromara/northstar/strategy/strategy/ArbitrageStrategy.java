@@ -102,7 +102,14 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
     protected void initIndicators() {
         Contract c1 = ctx.getContract(params.contract);
         Contract c2 = ctx.getContract(params.spot);
-        this.fundingRateIndicator = new OuYiFundingRateIndicator(Configuration.builder().contract(c1).indicatorName("rate").period(PeriodUnit.MINUTE).numOfUnits(this.params.updateInstIdMin).build(), this.params.contractInstId, 20);
+        this.fundingRateIndicator = new OuYiFundingRateIndicator(
+                Configuration.builder()
+                        .contract(c1)
+                        .indicatorName("rate")
+                        .period(PeriodUnit.MINUTE)
+                        .numOfUnits(this.params.updateInstIdMin)
+                        .build(),
+                this.params.contractInstId, 20);
         ctx.registerIndicator(fundingRateIndicator);
         logger = ctx.getLogger(getClass());
         contractHelper = new TradeHelper(ctx, c1);
@@ -201,26 +208,9 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
 
 //       无持仓
         if (shortContractPos > 0 && longSpot > 0 && diffPrice <= 0 ) {
-            ctx.submitOrderReq(TradeIntent.builder()
-                    .contract(c1)
-                    .operation(SignalOperation.BUY_CLOSE)
-                    .priceType(PriceType.LIMIT_PRICE)
-                    .price(contractTick.lastPrice())
-                    .volume(ctx.getDefaultVolume())
-                    .timeout(5000)
-                    .build());
             contractHelper.doBuyClose(contractTick.lastPrice(), shortContractPos, 10000, p -> true);
             logger.info("买平合约 {} 仓位 {}",contractTick.lastPrice(), shortContractPos);
-
-            ctx.submitOrderReq(TradeIntent.builder()
-                    .contract(c1)
-                    .operation(SignalOperation.BUY_OPEN)
-                    .priceType(PriceType.LIMIT_PRICE)
-                    .price(spotTick.lastPrice())
-                    .volume(ctx.getDefaultVolume())
-                    .timeout(5000)
-                    .build());
-            spotTradeHelper.doSellClose(contractTick.lastPrice(), longSpot, 10000, p -> true);
+            spotTradeHelper.doSellClose(spotTick.lastPrice(), longSpot, 10000, p -> true);
             logger.info("卖平现货 {} 仓位 {}",spotTick.lastPrice(), longSpot);
         }
     }

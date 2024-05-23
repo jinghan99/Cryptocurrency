@@ -71,6 +71,7 @@ public class OuYiFundingRateIndicator extends AbstractIndicator implements Indic
         }
 //        判断下期费率时间
         if (lastDataDTO.getNextFundingTime() < System.currentTimeMillis() ||
+//              提前更新时间 1小时   每5分钟内 不重复更新
                 (lastDataDTO.getNextFundingTime() - System.currentTimeMillis() < advanceTime && System.currentTimeMillis() - lastDataDTO.getTs() > syncTime)) {
             refresh(num);
         }
