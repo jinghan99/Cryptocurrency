@@ -7,35 +7,23 @@ import org.dromara.northstar.common.constant.ModuleType;
 import org.dromara.northstar.common.constant.SignalOperation;
 import org.dromara.northstar.common.model.DynamicParams;
 import org.dromara.northstar.common.model.Setting;
-import org.dromara.northstar.common.model.core.Bar;
 import org.dromara.northstar.common.model.core.Contract;
 import org.dromara.northstar.common.model.core.Tick;
-import org.dromara.northstar.common.model.core.Trade;
-import org.dromara.northstar.common.utils.FieldUtils;
 import org.dromara.northstar.common.utils.TradeHelper;
 import org.dromara.northstar.indicator.Indicator;
 import org.dromara.northstar.indicator.constant.PeriodUnit;
-import org.dromara.northstar.indicator.constant.ValueType;
-import org.dromara.northstar.indicator.helper.SimpleValueIndicator;
 import org.dromara.northstar.indicator.model.Configuration;
-import org.dromara.northstar.indicator.trend.EMAIndicator;
-import org.dromara.northstar.indicator.trend.MAIndicator;
-import org.dromara.northstar.indicator.volatility.TrueRangeIndicator;
 import org.dromara.northstar.strategy.AbstractStrategy;
 import org.dromara.northstar.strategy.StrategicComponent;
 import org.dromara.northstar.strategy.TradeStrategy;
-import org.dromara.northstar.strategy.constant.DirectionEnum;
 import org.dromara.northstar.strategy.constant.PriceType;
 import org.dromara.northstar.strategy.domain.FixedSizeQueue;
-import org.dromara.northstar.strategy.indicator.FundingRateIndicator;
+import org.dromara.northstar.strategy.indicator.OuYiFundingRateIndicator;
 import org.dromara.northstar.strategy.model.TradeIntent;
 import org.slf4j.Logger;
 import xyz.redtorch.pb.CoreEnum;
 
 import java.time.Duration;
-import java.time.LocalTime;
-import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 套利策略策略
@@ -80,7 +68,7 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
         private String contract;
 
         @Setting(label = "合约费率id", order = 11)
-        private String contractInstId;
+        private String contractInstId = "BTC-USD-SWAP";
 
         @Setting(label = "合约费率更新周期(分钟)", type = FieldType.NUMBER, order = 12)
         private int updateInstIdMin = 20;
@@ -114,7 +102,7 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
     protected void initIndicators() {
         Contract c1 = ctx.getContract(params.contract);
         Contract c2 = ctx.getContract(params.spot);
-        this.fundingRateIndicator = new FundingRateIndicator(Configuration.builder().contract(c1).indicatorName("rate").period(PeriodUnit.MINUTE).numOfUnits(this.params.updateInstIdMin).build(), this.params.contractInstId, 20);
+        this.fundingRateIndicator = new OuYiFundingRateIndicator(Configuration.builder().contract(c1).indicatorName("rate").period(PeriodUnit.MINUTE).numOfUnits(this.params.updateInstIdMin).build(), this.params.contractInstId, 20);
         ctx.registerIndicator(fundingRateIndicator);
         logger = ctx.getLogger(getClass());
         contractHelper = new TradeHelper(ctx, c1);
@@ -122,7 +110,7 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
     }
 
     /**
-     * 发现永续价格比现货高而且永续的资金费为正 就下单
+     *
      *
      * @param tick
      */
@@ -136,15 +124,17 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
             contractPriceQueue.add(tick);
             contractTick = tick;
         }
-        extracted();
-
+        openBuy();
+        closeSell();
     }
 
 
     /**
      * 执行 开仓逻辑
+     * 发现永续价格比现货高而且永续的资金费为正 就下单
+     * 买入等额的现货和永续
      */
-    private void extracted() {
+    private void openBuy() {
         //        校验时间
         if (!verifyDate()) {
             return;
@@ -188,11 +178,63 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
 
 
     /**
+     * 执行 平仓逻辑
+     * 发现永续的价格比现货价格低或者价格相等 则平仓
+     */
+    private void closeSell() {
+        //        校验时间
+        if (!verifyDate()) {
+            return;
+        }
+//        资金费为小于0
+        if (fundingRateIndicator.value(0) <= 0) {
+            return;
+        }
+
+        Contract c1 = ctx.getContract(params.contract);
+        Contract c2 = ctx.getContract(params.spot);
+//        合约 空仓
+        int shortContractPos = ctx.getModuleAccount().getNonclosedPosition(c1, CoreEnum.DirectionEnum.D_Sell);
+//        现货 多仓
+        int longSpot = ctx.getModuleAccount().getNonclosedPosition(c2, CoreEnum.DirectionEnum.D_Buy);
+        double diffPrice = contractTick.lastPrice() - spotTick.lastPrice();
+
+//       无持仓
+        if (shortContractPos > 0 && longSpot > 0 && diffPrice <= 0 ) {
+            ctx.submitOrderReq(TradeIntent.builder()
+                    .contract(c1)
+                    .operation(SignalOperation.BUY_CLOSE)
+                    .priceType(PriceType.LIMIT_PRICE)
+                    .price(contractTick.lastPrice())
+                    .volume(ctx.getDefaultVolume())
+                    .timeout(5000)
+                    .build());
+            contractHelper.doBuyClose(contractTick.lastPrice(), shortContractPos, 10000, p -> true);
+            logger.info("买平合约 {} 仓位 {}",contractTick.lastPrice(), shortContractPos);
+
+            ctx.submitOrderReq(TradeIntent.builder()
+                    .contract(c1)
+                    .operation(SignalOperation.BUY_OPEN)
+                    .priceType(PriceType.LIMIT_PRICE)
+                    .price(spotTick.lastPrice())
+                    .volume(ctx.getDefaultVolume())
+                    .timeout(5000)
+                    .build());
+            spotTradeHelper.doSellClose(contractTick.lastPrice(), longSpot, 10000, p -> true);
+            logger.info("卖平现货 {} 仓位 {}",spotTick.lastPrice(), longSpot);
+        }
+    }
+
+
+    /**
      * 校验时间 两个时间是否小于 2 秒
      *
      * @return
      */
     public boolean verifyDate() {
+        if(contractTick ==null || spotTick ==null){
+            return false;
+        }
         Duration duration = Duration.between(contractTick.actionTime(), spotTick.actionTime());
         return duration.toMillis() < 2000;
     }

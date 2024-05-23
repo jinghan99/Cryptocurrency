@@ -1,11 +1,9 @@
 package org.dromara.northstar.strategy.indicator;
 
-import cn.hutool.core.lang.Console;
-import cn.hutool.core.util.CharsetUtil;
+import cn.hutool.core.convert.Convert;
 import cn.hutool.http.Header;
 import cn.hutool.http.HttpRequest;
-import cn.hutool.http.HttpUtil;
-import cn.hutool.json.JSONUtil;
+import com.alibaba.fastjson2.JSON;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.dromara.northstar.indicator.AbstractIndicator;
@@ -16,26 +14,29 @@ import org.dromara.northstar.strategy.constant.DirectionEnum;
 import org.dromara.northstar.strategy.domain.FixedSizeQueue;
 import org.dromara.northstar.strategy.dto.OuYIFundingRateDto;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
+import java.math.BigDecimal;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 
 /**
- * 资金费率
+ * 欧意 资金费率
  * https://www.okx.com/api/v5/public/funding-rate?instId=BTC-USDT-SWAP
  */
 @Slf4j
-public class FundingRateIndicator extends AbstractIndicator implements Indicator {
+public class OuYiFundingRateIndicator extends AbstractIndicator implements Indicator {
 
 
     private static final String RATE_URL = "https://www.okx.com/api/v5/public/funding-rate?instId=";
+
+
+    /**
+     * 提前更新时间 1小时
+     */
+    private static final Long advanceTime = 60 * 60 * 1000L;
+
+    //    5分钟内 不重复更新
+    private static final int syncTime = 5 * 60 * 1000;
 
 
     @Getter
@@ -46,9 +47,13 @@ public class FundingRateIndicator extends AbstractIndicator implements Indicator
      */
     private String instId;
 
-    private double lastFundingRate;
+    private BigDecimal lastFundingRate;
 
-    public FundingRateIndicator(Configuration cfg, String instId, int barCount) {
+    @Getter
+    private OuYIFundingRateDto.DataDTO lastDataDTO;
+
+
+    public OuYiFundingRateIndicator(Configuration cfg, String instId, int barCount) {
         super(cfg);
         fixedSizeQueue = new FixedSizeQueue<>(barCount * 3);
         this.instId = instId;
@@ -61,20 +66,41 @@ public class FundingRateIndicator extends AbstractIndicator implements Indicator
     }
 
     protected Num evaluate(Num num) {
+        if (lastDataDTO == null) {
+            return refresh(num);
+        }
+//        判断下期费率时间
+        if (lastDataDTO.getNextFundingTime() < System.currentTimeMillis() ||
+                (lastDataDTO.getNextFundingTime() - System.currentTimeMillis() < advanceTime && System.currentTimeMillis() - lastDataDTO.getTs() > syncTime)) {
+            refresh(num);
+        }
+        return Num.of(Convert.toDouble(lastFundingRate), num.timestamp());
+    }
+
+
+    /**
+     * 刷新费率
+     *
+     * @param num
+     * @return
+     */
+    private Num refresh(Num num) {
         try {
             //链式构建请求
             String body = HttpRequest.get(RATE_URL + instId)
                     .header(Header.USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36")//头信息，多个头信息多次调用此方法即可
                     .timeout(20000)//超时，毫秒
                     .execute().body();
-            OuYIFundingRateDto rateDto = JSONUtil.toBean(body, OuYIFundingRateDto.class);
-            if (Objects.equals(rateDto.getCode(), "0")) {
-                lastFundingRate = rateDto.getData().getFirst().getFundingRate();
-                return Num.of(lastFundingRate, num.timestamp());
+            OuYIFundingRateDto rateDto = JSON.parseObject(body, OuYIFundingRateDto.class);
+            if (Objects.equals(rateDto.getCode(), "0") && rateDto.getData().size() > 0) {
+                OuYIFundingRateDto.DataDTO dataDTO = rateDto.getData().getFirst();
+                lastDataDTO = dataDTO;
+                lastFundingRate = dataDTO.getFundingRate();
+                return Num.of(Convert.toDouble(lastFundingRate), num.timestamp());
             }
         } catch (Exception e) {
             log.error("资金费率请求异常", e);
         }
-        return Num.of(lastFundingRate, num.timestamp());
+        return Num.of(Convert.toDouble(lastFundingRate), num.timestamp());
     }
 }

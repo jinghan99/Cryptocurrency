@@ -4,6 +4,7 @@ package org.dromara.northstar.strategy.dto;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -38,7 +39,7 @@ public class OuYIFundingRateDto {
         /**
          * 资金费率。
          */
-        private Double fundingRate;
+        private BigDecimal fundingRate;
 
         /**
          * 资金费时间，Unix 时间戳的毫秒数格式。
@@ -81,7 +82,7 @@ public class OuYIFundingRateDto {
         /**
          * 下一期资金费时间，Unix 时间戳的毫秒数格式。
          */
-        private String nextFundingTime;
+        private Long nextFundingTime;
 
         /**
          * 溢价，为合约的中间价和指数价格的差异。
@@ -93,7 +94,7 @@ public class OuYIFundingRateDto {
          * 如果 settState 为 processing，则该字段代表用于本轮结算的资金费率；
          * 如果 settState 为 settled，则该字段代表用于上轮结算的资金费率。
          */
-        private Double settFundingRate;
+        private BigDecimal settFundingRate;
 
         /**
          * 资金费率结算状态。
@@ -104,7 +105,7 @@ public class OuYIFundingRateDto {
         /**
          * 数据更新时间，Unix 时间戳的毫秒数格式。
          */
-        private String ts;
+        private Long ts;
     }
 }
 
