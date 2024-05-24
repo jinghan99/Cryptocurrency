@@ -12,6 +12,7 @@ import org.dromara.northstar.common.model.core.Tick;
 import org.dromara.northstar.common.utils.TradeHelper;
 import org.dromara.northstar.indicator.Indicator;
 import org.dromara.northstar.indicator.constant.PeriodUnit;
+import org.dromara.northstar.indicator.constant.ValueType;
 import org.dromara.northstar.indicator.model.Configuration;
 import org.dromara.northstar.strategy.AbstractStrategy;
 import org.dromara.northstar.strategy.StrategicComponent;
@@ -105,11 +106,12 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
         this.fundingRateIndicator = new OuYiFundingRateIndicator(
                 Configuration.builder()
                         .contract(c1)
+                        .cacheLength(100)
                         .indicatorName("rate")
-                        .period(PeriodUnit.MINUTE)
-                        .numOfUnits(this.params.updateInstIdMin)
-                        .build(),
-                this.params.contractInstId, 20);
+                        .valueType(ValueType.CLOSE)
+                        .numOfUnits(ctx.numOfMinPerMergedBar()).build(),
+                this.params.contractInstId);
+
         ctx.registerIndicator(fundingRateIndicator);
         logger = ctx.getLogger(getClass());
         contractHelper = new TradeHelper(ctx, c1);
@@ -117,8 +119,6 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
     }
 
     /**
-     *
-     *
      * @param tick
      */
     @Override
@@ -131,8 +131,18 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
             contractPriceQueue.add(tick);
             contractTick = tick;
         }
-        openBuy();
-        closeSell();
+
+        Contract c1 = ctx.getContract(params.contract);
+        Contract c2 = ctx.getContract(params.spot);
+//        合约 空仓
+        int shortContractPos = ctx.getModuleAccount().getNonclosedPosition(c1, CoreEnum.DirectionEnum.D_Sell);
+//        现货 多仓
+        int longSpot = ctx.getModuleAccount().getNonclosedPosition(c2, CoreEnum.DirectionEnum.D_Buy);
+        if (shortContractPos <= 0 && longSpot <= 0) {
+            openBuy();
+        } else {
+            closeSell();
+        }
     }
 
 
@@ -161,7 +171,7 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
         double diffPrice = contractTick.lastPrice() - spotTick.lastPrice();
 
 //       无持仓
-        if (shortContractPos <= 0 && longSpot <= 0 && diffPrice == this.params.diff) {
+        if (shortContractPos <= 0 && longSpot <= 0 && diffPrice == this.params.diff && fundingRateIndicator.value(0) > 0) {
             ctx.submitOrderReq(TradeIntent.builder()
                     .contract(c1)
                     .operation(SignalOperation.SELL_OPEN)
@@ -203,15 +213,19 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
 //        合约 空仓
         int shortContractPos = ctx.getModuleAccount().getNonclosedPosition(c1, CoreEnum.DirectionEnum.D_Sell);
 //        现货 多仓
-        int longSpot = ctx.getModuleAccount().getNonclosedPosition(c2, CoreEnum.DirectionEnum.D_Buy);
+        int longSpots = ctx.getModuleAccount().getNonclosedPosition(c2, CoreEnum.DirectionEnum.D_Buy);
         double diffPrice = contractTick.lastPrice() - spotTick.lastPrice();
 
-//       无持仓
-        if (shortContractPos > 0 && longSpot > 0 && diffPrice <= 0 ) {
-            contractHelper.doBuyClose(contractTick.lastPrice(), shortContractPos, 10000, p -> true);
-            logger.info("买平合约 {} 仓位 {}",contractTick.lastPrice(), shortContractPos);
-            spotTradeHelper.doSellClose(spotTick.lastPrice(), longSpot, 10000, p -> true);
-            logger.info("卖平现货 {} 仓位 {}",spotTick.lastPrice(), longSpot);
+//        发现 差价小于等于 0
+        if (diffPrice <= 0) {
+            if (shortContractPos > 0) {
+                contractHelper.doBuyClose(contractTick.lastPrice(), shortContractPos, 10000, p -> true);
+                logger.info("买平合约 {} 仓位 {}", contractTick.lastPrice(), shortContractPos);
+            }
+            if (longSpots > 0) {
+                spotTradeHelper.doSellClose(spotTick.lastPrice(), longSpots, 10000, p -> true);
+                logger.info("卖平现货 {} 仓位 {}", spotTick.lastPrice(), longSpots);
+            }
         }
     }
 
@@ -222,7 +236,7 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
      * @return
      */
     public boolean verifyDate() {
-        if(contractTick ==null || spotTick ==null){
+        if (contractTick == null || spotTick == null) {
             return false;
         }
         Duration duration = Duration.between(contractTick.actionTime(), spotTick.actionTime());
@@ -231,7 +245,7 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
 
     @Override
     public ModuleType type() {
-        return ModuleType.ARBITRAGE;    // 套利策略专有标识
+        return ModuleType.SPECULATION;    // 套利策略专有标识
     }
 
 }

@@ -39,23 +39,19 @@ public class OuYiFundingRateIndicator extends AbstractIndicator implements Indic
     private static final int syncTime = 5 * 60 * 1000;
 
 
-    @Getter
-    FixedSizeQueue<DirectionEnum> fixedSizeQueue;
-
     /**
      * 产品ID ，如 BTC-USD-SWAP 仅适用于永续
      */
     private String instId;
 
-    private BigDecimal lastFundingRate;
+    private BigDecimal lastFundingRate = BigDecimal.ZERO;
 
     @Getter
     private OuYIFundingRateDto.DataDTO lastDataDTO;
 
 
-    public OuYiFundingRateIndicator(Configuration cfg, String instId, int barCount) {
+    public OuYiFundingRateIndicator(Configuration cfg, String instId) {
         super(cfg);
-        fixedSizeQueue = new FixedSizeQueue<>(barCount * 3);
         this.instId = instId;
     }
 
@@ -73,9 +69,9 @@ public class OuYiFundingRateIndicator extends AbstractIndicator implements Indic
         if (lastDataDTO.getNextFundingTime() < System.currentTimeMillis() ||
 //              提前更新时间 1小时   每5分钟内 不重复更新
                 (lastDataDTO.getNextFundingTime() - System.currentTimeMillis() < advanceTime && System.currentTimeMillis() - lastDataDTO.getTs() > syncTime)) {
-            refresh(num);
+            return refresh(num);
         }
-        return Num.of(Convert.toDouble(lastFundingRate), num.timestamp());
+        return Num.of(Convert.toDouble(lastFundingRate.multiply(new BigDecimal(100))), num.timestamp());
     }
 
 
@@ -93,15 +89,14 @@ public class OuYiFundingRateIndicator extends AbstractIndicator implements Indic
                     .timeout(20000)//超时，毫秒
                     .execute().body();
             OuYIFundingRateDto rateDto = JSON.parseObject(body, OuYIFundingRateDto.class);
-            if (Objects.equals(rateDto.getCode(), "0") && rateDto.getData().size() > 0) {
+            if (Objects.equals(rateDto.getCode(), "0") && !rateDto.getData().isEmpty()) {
                 OuYIFundingRateDto.DataDTO dataDTO = rateDto.getData().getFirst();
                 lastDataDTO = dataDTO;
                 lastFundingRate = dataDTO.getFundingRate();
-                return Num.of(Convert.toDouble(lastFundingRate), num.timestamp());
             }
         } catch (Exception e) {
             log.error("资金费率请求异常", e);
         }
-        return Num.of(Convert.toDouble(lastFundingRate), num.timestamp());
+        return Num.of(Convert.toDouble(lastFundingRate.multiply(new BigDecimal(100))), num.timestamp());
     }
 }
