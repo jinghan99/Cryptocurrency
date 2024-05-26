@@ -7,11 +7,11 @@ import org.dromara.northstar.common.constant.ModuleType;
 import org.dromara.northstar.common.constant.SignalOperation;
 import org.dromara.northstar.common.model.DynamicParams;
 import org.dromara.northstar.common.model.Setting;
+import org.dromara.northstar.common.model.core.Bar;
 import org.dromara.northstar.common.model.core.Contract;
 import org.dromara.northstar.common.model.core.Tick;
 import org.dromara.northstar.common.utils.TradeHelper;
 import org.dromara.northstar.indicator.Indicator;
-import org.dromara.northstar.indicator.constant.PeriodUnit;
 import org.dromara.northstar.indicator.constant.ValueType;
 import org.dromara.northstar.indicator.model.Configuration;
 import org.dromara.northstar.strategy.AbstractStrategy;
@@ -19,7 +19,7 @@ import org.dromara.northstar.strategy.StrategicComponent;
 import org.dromara.northstar.strategy.TradeStrategy;
 import org.dromara.northstar.strategy.constant.PriceType;
 import org.dromara.northstar.strategy.domain.FixedSizeQueue;
-import org.dromara.northstar.strategy.indicator.OuYiFundingRateIndicator;
+import org.dromara.northstar.strategy.indicator.OKXFundingRateIndicator;
 import org.dromara.northstar.strategy.model.TradeIntent;
 import org.slf4j.Logger;
 import xyz.redtorch.pb.CoreEnum;
@@ -54,32 +54,68 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
 
     private TradeHelper spotTradeHelper;
 
-    private Indicator fundingRateIndicator;
+    private Indicator okxRateIndicator;
 
     final FixedSizeQueue<Tick> contractPriceQueue = new FixedSizeQueue<>(10);
     final FixedSizeQueue<Tick> spotPriceQueue = new FixedSizeQueue<>(10);
 
+    final FixedSizeQueue<Bar> contractBarQueue = new FixedSizeQueue<>(10);
+    final FixedSizeQueue<Bar> spotPriceBarQueue = new FixedSizeQueue<>(10);
+
     private Tick contractTick;
     private Tick spotTick;
+
+
+    private Bar contractBar;
+    private Bar spotBar;
+
+
+    @Override
+    public void onMergedBar(Bar bar) {
+        if (okxRateIndicator.getData().isEmpty()) {
+            logger.debug("指标未准备就绪");
+            return;
+        }
+
+        if (bar.contract().unifiedSymbol().equals(params.spot)) {
+            spotPriceBarQueue.add(bar);
+            spotBar = bar;
+        }
+        if (bar.contract().unifiedSymbol().equals(params.contract)) {
+            contractBarQueue.add(bar);
+            contractBar = bar;
+        }
+        Contract c1 = ctx.getContract(params.contract);
+        Contract c2 = ctx.getContract(params.spot);
+//        合约 空仓
+        int shortContractPos = ctx.getModuleAccount().getNonclosedPosition(c1, CoreEnum.DirectionEnum.D_Sell);
+//        现货 多仓
+        int longSpot = ctx.getModuleAccount().getNonclosedPosition(c2, CoreEnum.DirectionEnum.D_Buy);
+        if (shortContractPos <= 0 && longSpot <= 0) {
+            openBuy();
+        } else {
+            closeSell();
+        }
+    }
+
 
     @Setter
     public static class InitParams extends DynamicParams {
 
-        @Setting(label = "合约", order = 10)
+        @Setting(label = "合约编码", order = 10)
         private String contract;
 
-        @Setting(label = "合约费率id", order = 11)
+        @Setting(label = "OKX合约费率id", order = 11)
         private String contractInstId = "BTC-USD-SWAP";
 
-        @Setting(label = "合约费率更新周期(分钟)", type = FieldType.NUMBER, order = 12)
-        private int updateInstIdMin = 20;
-
-        @Setting(label = "现货", order = 21)
+        @Setting(label = "现货编码", order = 21)
         private String spot;
 
         @Setting(label = "永续价格比现货高 差异值", type = FieldType.NUMBER, order = 22)
         private double diff = 0.3;
 
+        @Setting(label = "是否tick级别(0 否 ，1是)", type = FieldType.NUMBER, order = 22)
+        private int isTick = 0;
 
     }
 
@@ -103,16 +139,16 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
     protected void initIndicators() {
         Contract c1 = ctx.getContract(params.contract);
         Contract c2 = ctx.getContract(params.spot);
-        this.fundingRateIndicator = new OuYiFundingRateIndicator(
+        this.okxRateIndicator = new OKXFundingRateIndicator(
                 Configuration.builder()
                         .contract(c1)
-                        .cacheLength(100)
+                        .cacheLength(20)
                         .indicatorName("rate")
                         .valueType(ValueType.CLOSE)
                         .numOfUnits(ctx.numOfMinPerMergedBar()).build(),
                 this.params.contractInstId);
 
-        ctx.registerIndicator(fundingRateIndicator);
+        ctx.registerIndicator(okxRateIndicator);
         logger = ctx.getLogger(getClass());
         contractHelper = new TradeHelper(ctx, c1);
         spotTradeHelper = new TradeHelper(ctx, c2);
@@ -123,6 +159,10 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
      */
     @Override
     public void onTick(Tick tick) {
+        if (okxRateIndicator.getData().isEmpty()) {
+            logger.debug("指标未准备就绪");
+            return;
+        }
         if (tick.contract().unifiedSymbol().equals(params.spot)) {
             spotPriceQueue.add(tick);
             spotTick = tick;
@@ -157,7 +197,7 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
             return;
         }
 //        资金费为小于0
-        if (fundingRateIndicator.value(0) <= 0) {
+        if (okxRateIndicator.value(0) <= 0 || this.spotTick == null || this.spotBar == null || this.contractTick == null || this.contractBar == null) {
             return;
         }
 
@@ -168,15 +208,19 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
 //        现货 多仓
         int longSpot = ctx.getModuleAccount().getNonclosedPosition(c2, CoreEnum.DirectionEnum.D_Buy);
 
-        double diffPrice = contractTick.lastPrice() - spotTick.lastPrice();
-
+//        合约价格
+        double contractPrice = params.isTick == 0 ? contractBar.closePrice() : contractTick.lastPrice();
+//        现货价格
+        double spotPrice = params.isTick == 0 ? spotBar.closePrice() : spotTick.lastPrice();
+//         价格差异
+        double diffPrice = contractPrice - spotPrice;
 //       无持仓
-        if (shortContractPos <= 0 && longSpot <= 0 && diffPrice == this.params.diff && fundingRateIndicator.value(0) > 0) {
+        if (shortContractPos <= 0 && longSpot <= 0 && diffPrice == this.params.diff && okxRateIndicator.value(0) > 0) {
             ctx.submitOrderReq(TradeIntent.builder()
                     .contract(c1)
                     .operation(SignalOperation.SELL_OPEN)
                     .priceType(PriceType.LIMIT_PRICE)
-                    .price(contractTick.lastPrice())
+                    .price(contractPrice)
                     .volume(ctx.getDefaultVolume())
                     .timeout(5000)
                     .build());
@@ -185,7 +229,7 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
                     .contract(c1)
                     .operation(SignalOperation.BUY_OPEN)
                     .priceType(PriceType.LIMIT_PRICE)
-                    .price(spotTick.lastPrice())
+                    .price(spotPrice)
                     .volume(ctx.getDefaultVolume())
                     .timeout(5000)
                     .build());
@@ -204,17 +248,22 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
             return;
         }
 //        资金费为小于0
-        if (fundingRateIndicator.value(0) <= 0) {
+        if (okxRateIndicator.value(0) <= 0 || this.spotTick == null || this.spotBar == null || this.contractTick == null || this.contractBar == null) {
             return;
         }
-
         Contract c1 = ctx.getContract(params.contract);
         Contract c2 = ctx.getContract(params.spot);
 //        合约 空仓
         int shortContractPos = ctx.getModuleAccount().getNonclosedPosition(c1, CoreEnum.DirectionEnum.D_Sell);
 //        现货 多仓
         int longSpots = ctx.getModuleAccount().getNonclosedPosition(c2, CoreEnum.DirectionEnum.D_Buy);
-        double diffPrice = contractTick.lastPrice() - spotTick.lastPrice();
+//        合约价格
+        double contractPrice = params.isTick == 0 ? contractBar.closePrice() : contractTick.lastPrice();
+//        现货价格
+        double spotPrice = params.isTick == 0 ? spotBar.closePrice() : spotTick.lastPrice();
+
+
+        double diffPrice = contractPrice - spotPrice;
 
 //        发现 差价小于等于 0
         if (diffPrice <= 0) {
@@ -245,7 +294,7 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
 
     @Override
     public ModuleType type() {
-        return ModuleType.SPECULATION;    // 套利策略专有标识
+        return ModuleType.ARBITRAGE;    // 套利策略 专有标识
     }
 
 }

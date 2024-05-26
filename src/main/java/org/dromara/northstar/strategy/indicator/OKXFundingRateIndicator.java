@@ -10,8 +10,6 @@ import org.dromara.northstar.indicator.AbstractIndicator;
 import org.dromara.northstar.indicator.Indicator;
 import org.dromara.northstar.indicator.model.Configuration;
 import org.dromara.northstar.indicator.model.Num;
-import org.dromara.northstar.strategy.constant.DirectionEnum;
-import org.dromara.northstar.strategy.domain.FixedSizeQueue;
 import org.dromara.northstar.strategy.dto.OuYIFundingRateDto;
 
 import java.math.BigDecimal;
@@ -24,7 +22,7 @@ import java.util.Objects;
  * https://www.okx.com/api/v5/public/funding-rate?instId=BTC-USDT-SWAP
  */
 @Slf4j
-public class OuYiFundingRateIndicator extends AbstractIndicator implements Indicator {
+public class OKXFundingRateIndicator extends AbstractIndicator implements Indicator {
 
 
     private static final String RATE_URL = "https://www.okx.com/api/v5/public/funding-rate?instId=";
@@ -50,7 +48,7 @@ public class OuYiFundingRateIndicator extends AbstractIndicator implements Indic
     private OuYIFundingRateDto.DataDTO lastDataDTO;
 
 
-    public OuYiFundingRateIndicator(Configuration cfg, String instId) {
+    public OKXFundingRateIndicator(Configuration cfg, String instId) {
         super(cfg);
         this.instId = instId;
     }
