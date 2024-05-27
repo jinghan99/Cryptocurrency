@@ -60,7 +60,7 @@ public class OuYIFundingRateDto {
         /**
          * 下一期的预测资金费率上限。
          */
-        private Double maxFundingRate;
+        private BigDecimal maxFundingRate;
 
         /**
          * 资金费收取逻辑。
@@ -71,13 +71,13 @@ public class OuYIFundingRateDto {
         /**
          * 下一期的预测资金费率下限。
          */
-        private Double minFundingRate;
+        private BigDecimal minFundingRate;
 
         /**
          * 下一期预测资金费率。
          * 当收取逻辑为 current_period 时，nextFundingRate 字段将返回空字符串。
          */
-        private Double nextFundingRate;
+        private BigDecimal nextFundingRate;
 
         /**
          * 下一期资金费时间，Unix 时间戳的毫秒数格式。
@@ -87,7 +87,7 @@ public class OuYIFundingRateDto {
         /**
          * 溢价，为合约的中间价和指数价格的差异。
          */
-        private Double premium;
+        private BigDecimal premium;
 
         /**
          * 结算资金费率。

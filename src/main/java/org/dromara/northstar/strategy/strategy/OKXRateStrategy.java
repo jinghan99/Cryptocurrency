@@ -14,6 +14,7 @@ import org.dromara.northstar.common.utils.TradeHelper;
 import org.dromara.northstar.indicator.Indicator;
 import org.dromara.northstar.indicator.constant.ValueType;
 import org.dromara.northstar.indicator.model.Configuration;
+import org.dromara.northstar.indicator.model.Num;
 import org.dromara.northstar.strategy.AbstractStrategy;
 import org.dromara.northstar.strategy.StrategicComponent;
 import org.dromara.northstar.strategy.TradeStrategy;
@@ -27,7 +28,7 @@ import xyz.redtorch.pb.CoreEnum;
 import java.time.Duration;
 
 /**
- * 套利策略策略
+ * OKX 套利策略策略
  * 水续平仓价格:990元
  * 水续价格收益:1000-990=10元
  * 现货平全价格:990元现货价格收监:990-999=-9元价道收益:10-9=1元
@@ -41,10 +42,10 @@ import java.time.Duration;
  * 发现永续的价格比现货价格低或者价格一直 则平仓
  * 下单用定价下单
  */
-@StrategicComponent(ArbitrageStrategy.NAME)
-public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy {
+@StrategicComponent(OKXRateStrategy.NAME)
+public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
 
-    protected static final String NAME = "套利策略-1.0";
+    protected static final String NAME = "OKX套利策略-1.0";
 
     private InitParams params;    // 策略的参数配置信息
 
@@ -65,13 +66,18 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
     private Tick contractTick;
     private Tick spotTick;
 
-
     private Bar contractBar;
+
     private Bar spotBar;
 
 
     @Override
     public void onMergedBar(Bar bar) {
+//       依据配置的 K线周期 更新指标
+        okxRateIndicator.update(Num.of(bar.closePrice(), bar.actionTimestamp()));
+        if (isTick()) {
+            return;
+        }
         if (okxRateIndicator.getData().isEmpty()) {
             logger.debug("指标未准备就绪");
             return;
@@ -111,7 +117,7 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
         @Setting(label = "现货编码", order = 21)
         private String spot;
 
-        @Setting(label = "永续价格比现货高 差异值", type = FieldType.NUMBER, order = 22)
+        @Setting(label = "永续价格比现货高下单临界值", type = FieldType.NUMBER, order = 22)
         private double diff = 0.3;
 
         @Setting(label = "是否tick级别(0 否 ，1是)", type = FieldType.NUMBER, order = 22)
@@ -142,13 +148,10 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
         this.okxRateIndicator = new OKXFundingRateIndicator(
                 Configuration.builder()
                         .contract(c1)
-                        .cacheLength(20)
-                        .indicatorName("rate")
+                        .indicatorName("rate_")
                         .valueType(ValueType.CLOSE)
                         .numOfUnits(ctx.numOfMinPerMergedBar()).build(),
                 this.params.contractInstId);
-
-        ctx.registerIndicator(okxRateIndicator);
         logger = ctx.getLogger(getClass());
         contractHelper = new TradeHelper(ctx, c1);
         spotTradeHelper = new TradeHelper(ctx, c2);
@@ -159,6 +162,9 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
      */
     @Override
     public void onTick(Tick tick) {
+        if (!isTick()) {
+            return;
+        }
         if (okxRateIndicator.getData().isEmpty()) {
             logger.debug("指标未准备就绪");
             return;
@@ -258,10 +264,9 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
 //        现货 多仓
         int longSpots = ctx.getModuleAccount().getNonclosedPosition(c2, CoreEnum.DirectionEnum.D_Buy);
 //        合约价格
-        double contractPrice = params.isTick == 0 ? contractBar.closePrice() : contractTick.lastPrice();
+        double contractPrice = isTick() ? contractTick.lastPrice() : contractBar.closePrice();
 //        现货价格
-        double spotPrice = params.isTick == 0 ? spotBar.closePrice() : spotTick.lastPrice();
-
+        double spotPrice = isTick() ? spotTick.lastPrice() : spotBar.closePrice();
 
         double diffPrice = contractPrice - spotPrice;
 
@@ -285,16 +290,33 @@ public class ArbitrageStrategy extends AbstractStrategy implements TradeStrategy
      * @return
      */
     public boolean verifyDate() {
-        if (contractTick == null || spotTick == null) {
+        if (isTick()) {
+            if (contractTick == null || spotTick == null) {
+                return false;
+            }
+            Duration duration = Duration.between(contractTick.actionTime(), spotTick.actionTime());
+            return duration.toMillis() < 2000;
+        }
+        if (contractBar == null || spotBar == null) {
             return false;
         }
-        Duration duration = Duration.between(contractTick.actionTime(), spotTick.actionTime());
-        return duration.toMillis() < 2000;
+        Duration duration = Duration.between(contractBar.actionTime(), spotBar.actionTime());
+        return duration.toMillis() < 10000;
     }
 
     @Override
     public ModuleType type() {
         return ModuleType.ARBITRAGE;    // 套利策略 专有标识
+    }
+
+
+    /**
+     * 是否 tick 级别 监听
+     *
+     * @return
+     */
+    public boolean isTick() {
+        return params.isTick == 1;
     }
 
 }

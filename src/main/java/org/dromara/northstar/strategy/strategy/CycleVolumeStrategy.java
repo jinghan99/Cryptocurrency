@@ -20,6 +20,7 @@ import org.dromara.northstar.strategy.TradeStrategy;
 import org.dromara.northstar.strategy.constant.DirectionEnum;
 import org.dromara.northstar.strategy.indicator.CycleRuleIndicator;
 import org.dromara.northstar.strategy.indicator.CycleVolumeIndicator;
+import org.dromara.northstar.strategy.indicator.OKXFundingRateIndicator;
 import org.slf4j.Logger;
 import xyz.redtorch.pb.CoreEnum;
 
@@ -38,6 +39,7 @@ public class CycleVolumeStrategy extends AbstractStrategy    // 为了简化代�
 
 
     private CycleRuleIndicator maxCycleRuleIndicator;
+    private Indicator okxRateIndicator;
 
 
     private CycleRuleIndicator minCycleRuleIndicator;
@@ -289,7 +291,15 @@ public class CycleVolumeStrategy extends AbstractStrategy    // 为了简化代�
                 .valueType(ValueType.VOL_DELTA)
                 .numOfUnits(ctx.numOfMinPerMergedBar()).build(), params.volumeDeltaPeriod);
 
-
+        this.okxRateIndicator = new OKXFundingRateIndicator(
+                Configuration.builder()
+                        .contract(c)
+                        .cacheLength(20)
+                        .indicatorName("rate")
+                        .valueType(ValueType.CLOSE)
+                        .numOfUnits(ctx.numOfMinPerMergedBar()).build(), "");
+// 指标的注册
+        ctx.registerIndicator(okxRateIndicator);
         logger = ctx.getLogger(getClass());
         // 指标的注册
         ctx.registerIndicator(maxCycleRuleIndicator);
