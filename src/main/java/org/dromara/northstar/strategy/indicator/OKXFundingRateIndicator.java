@@ -26,6 +26,7 @@ public class OKXFundingRateIndicator extends AbstractIndicator implements Indica
 
 
     private static final String RATE_URL = "https://www.okx.com/api/v5/public/funding-rate?instId=";
+    private static final String HISTORY_URL = "https://www.okx.com/api/v5/public/funding-rate-history";
 
 
     /**
@@ -97,4 +98,43 @@ public class OKXFundingRateIndicator extends AbstractIndicator implements Indica
         }
         return Num.of(Convert.toDouble(lastFundingRate.multiply(new BigDecimal(100))), num.timestamp());
     }
+
+
+    /**
+     * 获取历史
+     * @param num
+     * @return
+     * instId    String	是	产品ID ，如 BTC-USD-SWAP 仅适用于永续
+     * before	String	否	请求此时间戳之后（更新的数据）的分页内容，传的值为对应接口的fundingTime
+     * after	String	否	请求此时间戳之前（更旧的数据）的分页内容，传的值为对应接口的fundingTime
+     * limit	String	否	分页返回的结果集数量，最大为100，不填默认返回100条
+     */
+    public static Num history(Num num) {
+        try {
+            //链式构建请求
+            String body = HttpRequest.get(HISTORY_URL)
+                    .form("instId", "BTC-USD-SWAP")
+                    .form("after", num.timestamp())
+                    .form("limit", 1)
+                    .header(Header.USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36")//头信息，多个头信息多次调用此方法即可
+                    .timeout(20000)//超时，毫秒
+                    .execute().body();
+            OuYIFundingRateDto rateDto = JSON.parseObject(body, OuYIFundingRateDto.class);
+            if (Objects.equals(rateDto.getCode(), "0") && !rateDto.getData().isEmpty()) {
+                OuYIFundingRateDto.DataDTO dataDTO = rateDto.getData().getFirst();
+
+            }
+        } catch (Exception e) {
+            log.error("资金费率请求异常", e);
+        }
+        return num;
+
+
+
+    }
+
+    public static void main(String[] args) {
+        OKXFundingRateIndicator.history(Num.of(1,1714228276000L));
+    }
+
 }

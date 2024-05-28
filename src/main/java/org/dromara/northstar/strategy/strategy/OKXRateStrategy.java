@@ -25,6 +25,8 @@ import org.dromara.northstar.strategy.model.TradeIntent;
 import org.slf4j.Logger;
 import xyz.redtorch.pb.CoreEnum;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Duration;
 
 /**
@@ -70,11 +72,30 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
 
     private Bar spotBar;
 
+    @Setter
+    public static class InitParams extends DynamicParams {
+
+        @Setting(label = "合约编码", order = 10)
+        private String contract;
+
+        @Setting(label = "OKX合约费率id", order = 11)
+        private String contractInstId = "BTC-USD-SWAP";
+
+        @Setting(label = "现货编码", order = 21)
+        private String spot;
+
+        @Setting(label = "永续价格与现货高下单临界值", type = FieldType.NUMBER, order = 22)
+        private double diff = 0.003;
+
+
+        @Setting(label = "是否tick级别(0 否 ，1是)", type = FieldType.NUMBER, order = 22)
+        private int isTick = 0;
+
+    }
+
 
     @Override
     public void onMergedBar(Bar bar) {
-//       依据配置的 K线周期 更新指标
-        okxRateIndicator.update(Num.of(bar.closePrice(), bar.actionTimestamp()));
         if (isTick()) {
             return;
         }
@@ -105,26 +126,6 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
     }
 
 
-    @Setter
-    public static class InitParams extends DynamicParams {
-
-        @Setting(label = "合约编码", order = 10)
-        private String contract;
-
-        @Setting(label = "OKX合约费率id", order = 11)
-        private String contractInstId = "BTC-USD-SWAP";
-
-        @Setting(label = "现货编码", order = 21)
-        private String spot;
-
-        @Setting(label = "永续价格比现货高下单临界值", type = FieldType.NUMBER, order = 22)
-        private double diff = 0.3;
-
-        @Setting(label = "是否tick级别(0 否 ，1是)", type = FieldType.NUMBER, order = 22)
-        private int isTick = 0;
-
-    }
-
     /***************** 以下如果看不懂，基本可以照搬 *************************/
     @Override
     public DynamicParams getDynamicParams() {
@@ -152,6 +153,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
                         .valueType(ValueType.CLOSE)
                         .numOfUnits(ctx.numOfMinPerMergedBar()).build(),
                 this.params.contractInstId);
+        ctx.registerIndicator(okxRateIndicator);
         logger = ctx.getLogger(getClass());
         contractHelper = new TradeHelper(ctx, c1);
         spotTradeHelper = new TradeHelper(ctx, c2);
@@ -199,27 +201,26 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
      */
     private void openBuy() {
         //        校验时间
-        if (!verifyDate()) {
+        if (!verifyDate() || verifyNoPass()) {
             return;
         }
-//        资金费为小于0
-        if (okxRateIndicator.value(0) <= 0 || this.spotTick == null || this.spotBar == null || this.contractTick == null || this.contractBar == null) {
-            return;
-        }
-
         Contract c1 = ctx.getContract(params.contract);
         Contract c2 = ctx.getContract(params.spot);
 //        合约 空仓
         int shortContractPos = ctx.getModuleAccount().getNonclosedPosition(c1, CoreEnum.DirectionEnum.D_Sell);
 //        现货 多仓
         int longSpot = ctx.getModuleAccount().getNonclosedPosition(c2, CoreEnum.DirectionEnum.D_Buy);
-
 //        合约价格
         double contractPrice = params.isTick == 0 ? contractBar.closePrice() : contractTick.lastPrice();
 //        现货价格
         double spotPrice = params.isTick == 0 ? spotBar.closePrice() : spotTick.lastPrice();
-//         价格差异
-        double diffPrice = contractPrice - spotPrice;
+        // 计算diff的小数位数
+        int scale = calculateDecimalPlaces(this.params.diff);
+//         价格差 合约 - 现货
+        BigDecimal diffPriceBD = new BigDecimal(contractPrice).subtract(new BigDecimal(spotPrice));
+        // 保留 scale 位小数
+        BigDecimal diffPriceRounded = diffPriceBD.setScale(scale, RoundingMode.HALF_UP);
+        double diffPrice = diffPriceRounded.doubleValue();
 //       无持仓
         if (shortContractPos <= 0 && longSpot <= 0 && diffPrice == this.params.diff && okxRateIndicator.value(0) > 0) {
             ctx.submitOrderReq(TradeIntent.builder()
@@ -243,6 +244,21 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
         }
     }
 
+    /**
+     * 检验数据
+     *
+     * @return
+     */
+    private boolean verifyNoPass() {
+        if (okxRateIndicator.value(0) <= 0) {
+            return true;
+        }
+        if (isTick() && (this.spotTick == null || this.contractTick == null)) {
+            return true;
+        }
+        return !isTick() && (this.spotBar == null || this.contractBar == null);
+    }
+
 
     /**
      * 执行 平仓逻辑
@@ -250,11 +266,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
      */
     private void closeSell() {
         //        校验时间
-        if (!verifyDate()) {
-            return;
-        }
-//        资金费为小于0
-        if (okxRateIndicator.value(0) <= 0 || this.spotTick == null || this.spotBar == null || this.contractTick == null || this.contractBar == null) {
+        if (!verifyDate() || verifyNoPass()) {
             return;
         }
         Contract c1 = ctx.getContract(params.contract);
@@ -319,4 +331,20 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
         return params.isTick == 1;
     }
 
+
+    /**
+     * 计算小数位
+     *
+     * @param number
+     * @return
+     */
+    private int calculateDecimalPlaces(double number) {
+        BigDecimal bd = new BigDecimal(Double.toString(number));
+        String[] parts = bd.toPlainString().split("\\.");
+        if (parts.length > 1) {
+            return parts[1].length();
+        } else {
+            return 0; // 如果没有小数部分，返回0
+        }
+    }
 }
