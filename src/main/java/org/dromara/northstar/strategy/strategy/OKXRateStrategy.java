@@ -78,14 +78,11 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
         @Setting(label = "合约编码", order = 10)
         private String contract;
 
-        @Setting(label = "OKX合约费率id", order = 11)
-        private String contractInstId = "BTC-USD-SWAP";
-
         @Setting(label = "现货编码", order = 21)
         private String spot;
 
-        @Setting(label = "永续价格与现货高下单临界值", type = FieldType.NUMBER, order = 22)
-        private double diff = 0.003;
+        @Setting(label = "合约-现货差价（%）", type = FieldType.NUMBER, order = 22)
+        private double diff = 0.15;
 
 
         @Setting(label = "是否tick级别(0 否 ，1是)", type = FieldType.NUMBER, order = 22)
@@ -152,7 +149,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
                         .indicatorName("rate_")
                         .valueType(ValueType.CLOSE)
                         .numOfUnits(ctx.numOfMinPerMergedBar()).build(),
-                this.params.contractInstId);
+                this.params.contract);
         ctx.registerIndicator(okxRateIndicator);
         logger = ctx.getLogger(getClass());
         contractHelper = new TradeHelper(ctx, c1);
@@ -198,6 +195,9 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
      * 执行 开仓逻辑
      * 发现永续价格比现货高而且永续的资金费为正 就下单
      * 买入等额的现货和永续
+     * <p>
+     * 合约 - 现货 > 0 开仓
+     * 合约 - 现货 < 0 平仓
      */
     private void openBuy() {
         //        校验时间
@@ -214,15 +214,10 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
         double contractPrice = params.isTick == 0 ? contractBar.closePrice() : contractTick.lastPrice();
 //        现货价格
         double spotPrice = params.isTick == 0 ? spotBar.closePrice() : spotTick.lastPrice();
-        // 计算diff的小数位数
-        int scale = calculateDecimalPlaces(this.params.diff);
-//         价格差 合约 - 现货
-        BigDecimal diffPriceBD = new BigDecimal(contractPrice).subtract(new BigDecimal(spotPrice));
-        // 保留 scale 位小数
-        BigDecimal diffPriceRounded = diffPriceBD.setScale(scale, RoundingMode.HALF_UP);
-        double diffPrice = diffPriceRounded.doubleValue();
-//       无持仓
-        if (shortContractPos <= 0 && longSpot <= 0 && diffPrice == this.params.diff && okxRateIndicator.value(0) > 0) {
+//        计算差价百分比
+        double calculatedDiffPrice = calculatePercentageDifference(spotPrice, contractPrice);
+//       无持仓  合约 - 现货 > 设置差值 并且 资金费为正
+        if (shortContractPos <= 0 && longSpot <= 0 && calculatedDiffPrice > this.params.diff && okxRateIndicator.value(0) > 0) {
             ctx.submitOrderReq(TradeIntent.builder()
                     .contract(c1)
                     .operation(SignalOperation.SELL_OPEN)
@@ -282,8 +277,11 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
 
         double diffPrice = contractPrice - spotPrice;
 
+        //        计算差价百分比
+        double calculatedDiffPrice = calculatePercentageDifference(spotPrice, contractPrice);
+
 //        发现 差价小于等于 0
-        if (diffPrice <= 0) {
+        if (calculatedDiffPrice < -1 * this.params.diff) {
             if (shortContractPos > 0) {
                 contractHelper.doBuyClose(contractTick.lastPrice(), shortContractPos, 10000, p -> true);
                 logger.info("买平合约 {} 仓位 {}", contractTick.lastPrice(), shortContractPos);
@@ -346,5 +344,19 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
         } else {
             return 0; // 如果没有小数部分，返回0
         }
+    }
+
+    /**
+     * 计算差价百分比的方法
+     * 合约 - 现货 > 0 开仓
+     * 合约 - 现货 < 0 平仓
+     *
+     * @param spotPrice
+     * @param contractPrice
+     * @return
+     */
+    public static double calculatePercentageDifference(double spotPrice, double contractPrice) {
+        double difference = Math.abs(spotPrice - contractPrice);
+        return (difference / spotPrice) * 100;
     }
 }

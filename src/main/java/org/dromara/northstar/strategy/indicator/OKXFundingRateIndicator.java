@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 欧意 资金费率
+ * 欧意 资金费率 0.15%
  * https://www.okx.com/api/v5/public/funding-rate?instId=BTC-USDT-SWAP
  */
 @Slf4j
@@ -83,7 +83,12 @@ public class OKXFundingRateIndicator extends AbstractIndicator implements Indica
     private Num refresh(Num num) {
         try {
             //链式构建请求
-            String body = HttpRequest.get(RATE_URL + instId)
+            if(!instId.contains("SWAP@")){
+                log.error("资金费率请求异常 instId 不正确 {}", instId);
+                return Num.of(0, num.timestamp());
+            }
+            String[] swaps = instId.split("@");
+            String body = HttpRequest.get(RATE_URL + swaps[0])
                     .header(Header.USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36")//头信息，多个头信息多次调用此方法即可
                     .timeout(20000)//超时，毫秒
                     .execute().body();
