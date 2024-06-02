@@ -198,7 +198,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
      * 合约 - 现货 < 0 平仓
      */
     private void openBuy() {
-        //        校验时间
+        // 校验时间 是否同一分钟
         if (!verifyDate() || verifyNoPass()) {
             return;
         }
