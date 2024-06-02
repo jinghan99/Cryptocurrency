@@ -14,7 +14,6 @@ import org.dromara.northstar.common.utils.TradeHelper;
 import org.dromara.northstar.indicator.Indicator;
 import org.dromara.northstar.indicator.constant.ValueType;
 import org.dromara.northstar.indicator.model.Configuration;
-import org.dromara.northstar.indicator.model.Num;
 import org.dromara.northstar.strategy.AbstractStrategy;
 import org.dromara.northstar.strategy.StrategicComponent;
 import org.dromara.northstar.strategy.TradeStrategy;
@@ -26,7 +25,6 @@ import org.slf4j.Logger;
 import xyz.redtorch.pb.CoreEnum;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Duration;
 
 /**
@@ -307,7 +305,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
         if (contractBar == null || spotBar == null) {
             return false;
         }
-        Duration duration = Duration.between(contractBar.actionTime(), spotBar.actionTime());
+         Duration duration = Duration.between(contractBar.actionTime(), spotBar.actionTime());
         return duration.toMillis() < 10000;
     }
 
