@@ -85,8 +85,8 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
         private double diff = 0.15;
 
 
-        @Setting(label = "是否tick级别(0 否 ，1是)", type = FieldType.NUMBER, order = 22)
-        private int isTick = 0;
+        @Setting(label = "是否tick级别", order = 40, type = FieldType.SELECT, options = {"否", "是"}, optionsVal = {"0", "1"})
+        private String isTick = "0";
 
     }
 
@@ -211,9 +211,9 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
 //        现货 多仓
         int longSpot = ctx.getModuleAccount().getNonclosedPosition(c2, CoreEnum.DirectionEnum.D_Buy);
 //        合约价格
-        double contractPrice = params.isTick == 0 ? contractBar.closePrice() : contractTick.lastPrice();
+        double contractPrice = isTick() ? contractTick.lastPrice() : contractBar.closePrice();
 //        现货价格
-        double spotPrice = params.isTick == 0 ? spotBar.closePrice() : spotTick.lastPrice();
+        double spotPrice = isTick() ? spotTick.lastPrice() : spotBar.closePrice();
 //        计算差价百分比
         double calculatedDiffPrice = calculatePercentageDifference(spotPrice, contractPrice);
 //       无持仓  合约 - 现货 > 设置差值 并且 资金费为正
@@ -274,9 +274,6 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
         double contractPrice = isTick() ? contractTick.lastPrice() : contractBar.closePrice();
 //        现货价格
         double spotPrice = isTick() ? spotTick.lastPrice() : spotBar.closePrice();
-
-        double diffPrice = contractPrice - spotPrice;
-
         //        计算差价百分比
         double calculatedDiffPrice = calculatePercentageDifference(spotPrice, contractPrice);
 
@@ -326,7 +323,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
      * @return
      */
     public boolean isTick() {
-        return params.isTick == 1;
+        return params.isTick == "1";
     }
 
 
