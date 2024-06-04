@@ -82,7 +82,7 @@ public class OKXFundingRateIndicator extends AbstractIndicator implements Indica
         }
 //        判断是否有历史数据 floorEntry 获取最接近的 之前的 一个费率
         Map.Entry<Long, Double> entry = historyRateMap.floorEntry(num.timestamp());
-//        不是最新的一个费率 并且 在4小时 以内
+//        不是最新的一个费率 或者 在4小时 以内
         if (historyRateMap.lastEntry() != entry || num.timestamp() - entry.getKey() < 1000 * 60 * 4) {
             BigDecimal rate = BigDecimal.valueOf(entry.getValue());
             return Num.of(Convert.toDouble(rate.multiply(new BigDecimal(100))), num.timestamp());
