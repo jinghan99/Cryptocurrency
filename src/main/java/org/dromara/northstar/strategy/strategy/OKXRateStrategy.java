@@ -51,9 +51,6 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
 
     private Logger logger;
 
-    private TradeHelper contractHelper;
-
-    private TradeHelper spotTradeHelper;
 
     private Indicator okxRateIndicator;
 
@@ -150,8 +147,6 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
                 this.params.contract);
         ctx.registerIndicator(okxRateIndicator);
         logger = ctx.getLogger(getClass());
-        contractHelper = new TradeHelper(ctx, c1);
-        spotTradeHelper = new TradeHelper(ctx, c2);
     }
 
     /**
@@ -202,12 +197,12 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
         if (!verifyDate() || verifyNoPass()) {
             return;
         }
-        Contract c1 = ctx.getContract(params.contract);
-        Contract c2 = ctx.getContract(params.spot);
+        Contract swap = ctx.getContract(params.contract);
+        Contract spot = ctx.getContract(params.spot);
 //        合约 空仓
-        int shortContractPos = ctx.getModuleAccount().getNonclosedPosition(c1, CoreEnum.DirectionEnum.D_Sell);
+        int shortContractPos = ctx.getModuleAccount().getNonclosedPosition(swap, CoreEnum.DirectionEnum.D_Sell);
 //        现货 多仓
-        int longSpot = ctx.getModuleAccount().getNonclosedPosition(c2, CoreEnum.DirectionEnum.D_Buy);
+        int longSpot = ctx.getModuleAccount().getNonclosedPosition(spot, CoreEnum.DirectionEnum.D_Buy);
 //        合约价格
         double contractPrice = isTick() ? contractTick.lastPrice() : contractBar.closePrice();
 //        现货价格
@@ -217,7 +212,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
 //       无持仓  合约 - 现货 > 设置差值 并且 资金费为正
         if (shortContractPos <= 0 && longSpot <= 0 && calculatedDiffPrice > this.params.diff && okxRateIndicator.value(0) > 0) {
             ctx.submitOrderReq(TradeIntent.builder()
-                    .contract(c1)
+                    .contract(swap)
                     .operation(SignalOperation.SELL_OPEN)
                     .priceType(PriceType.LIMIT_PRICE)
                     .price(contractPrice)
@@ -226,7 +221,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
                     .build());
             logger.info("空开合约");
             ctx.submitOrderReq(TradeIntent.builder()
-                    .contract(c1)
+                    .contract(spot)
                     .operation(SignalOperation.BUY_OPEN)
                     .priceType(PriceType.LIMIT_PRICE)
                     .price(spotPrice)
@@ -262,12 +257,12 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
         if (!verifyDate() || verifyNoPass()) {
             return;
         }
-        Contract c1 = ctx.getContract(params.contract);
-        Contract c2 = ctx.getContract(params.spot);
+        Contract swap = ctx.getContract(params.contract);
+        Contract spot = ctx.getContract(params.spot);
 //        合约 空仓
-        int shortContractPos = ctx.getModuleAccount().getNonclosedPosition(c1, CoreEnum.DirectionEnum.D_Sell);
+        int shortContractPos = ctx.getModuleAccount().getNonclosedPosition(swap, CoreEnum.DirectionEnum.D_Sell);
 //        现货 多仓
-        int longSpots = ctx.getModuleAccount().getNonclosedPosition(c2, CoreEnum.DirectionEnum.D_Buy);
+        int longSpots = ctx.getModuleAccount().getNonclosedPosition(spot, CoreEnum.DirectionEnum.D_Buy);
 //        合约价格
         double contractPrice = isTick() ? contractTick.lastPrice() : contractBar.closePrice();
 //        现货价格
@@ -278,11 +273,25 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
 //        发现 差价小于等于 0
         if (calculatedDiffPrice < -1 * this.params.diff) {
             if (shortContractPos > 0) {
-                contractHelper.doBuyClose(contractTick.lastPrice(), shortContractPos, 10000, p -> true);
+                ctx.submitOrderReq(TradeIntent.builder()
+                        .contract(swap)
+                        .operation(SignalOperation.BUY_CLOSE)
+                        .priceType(PriceType.LIMIT_PRICE)
+                        .price(contractPrice)
+                        .volume(ctx.getDefaultVolume())
+                        .timeout(5000)
+                        .build());
                 logger.info("买平合约 {} 仓位 {}", contractTick.lastPrice(), shortContractPos);
             }
             if (longSpots > 0) {
-                spotTradeHelper.doSellClose(spotTick.lastPrice(), longSpots, 10000, p -> true);
+                ctx.submitOrderReq(TradeIntent.builder()
+                        .contract(spot)
+                        .operation(SignalOperation.SELL_CLOSE)
+                        .priceType(PriceType.LIMIT_PRICE)
+                        .price(spotPrice)
+                        .volume(ctx.getDefaultVolume())
+                        .timeout(5000)
+                        .build());
                 logger.info("卖平现货 {} 仓位 {}", spotTick.lastPrice(), longSpots);
             }
         }

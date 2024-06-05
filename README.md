@@ -48,3 +48,8 @@ EhP6akZrVEJDayjN6K1Xcor3UCuZkagUxqHqzoZNdJsH6jkyctbgIDX4pyFtePFk
 
 2024.4.2 11.52 开启
 ### CycleBarStrategy
+```angular2html
+
+```
+这是一个公式 $f(r) = \frac {\pi r} {2} $
+
