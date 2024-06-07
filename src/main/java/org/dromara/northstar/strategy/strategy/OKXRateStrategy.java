@@ -81,7 +81,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
         private String spot;
 
         @Setting(label = "现货手数", type = FieldType.NUMBER, order = 21)
-        private int spotNum;
+        private int spotNum= 1;
 
 
         @Setting(label = "合约-现货差价（%）", type = FieldType.NUMBER, order = 22)
