@@ -73,8 +73,16 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
         @Setting(label = "合约编码", order = 10)
         private String contract;
 
+        @Setting(label = "合约手数", type = FieldType.NUMBER, order = 11)
+        private int contractNum = 1;
+
+
         @Setting(label = "现货编码", order = 21)
         private String spot;
+
+        @Setting(label = "现货手数", type = FieldType.NUMBER, order = 21)
+        private int spotNum;
+
 
         @Setting(label = "合约-现货差价（%）", type = FieldType.NUMBER, order = 22)
         private double diff = 0.15;
@@ -197,6 +205,9 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
         if (!verifyDate() || verifyNoPass()) {
             return;
         }
+        if (okxRateIndicator.value(0) <= 0) {
+            return;
+        }
         Contract swap = ctx.getContract(params.contract);
         Contract spot = ctx.getContract(params.spot);
 //        合约 空仓
@@ -216,7 +227,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
                     .operation(SignalOperation.SELL_OPEN)
                     .priceType(PriceType.LIMIT_PRICE)
                     .price(contractPrice)
-                    .volume(ctx.getDefaultVolume())
+                    .volume(params.contractNum)
                     .timeout(5000)
                     .build());
             logger.info("空开合约");
@@ -225,7 +236,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
                     .operation(SignalOperation.BUY_OPEN)
                     .priceType(PriceType.LIMIT_PRICE)
                     .price(spotPrice)
-                    .volume(ctx.getDefaultVolume())
+                    .volume(params.spotNum)
                     .timeout(5000)
                     .build());
             logger.info("多开现货");
@@ -238,9 +249,6 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
      * @return
      */
     private boolean verifyNoPass() {
-        if (okxRateIndicator.value(0) <= 0) {
-            return true;
-        }
         if (isTick() && (this.spotTick == null || this.contractTick == null)) {
             return true;
         }
@@ -278,7 +286,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
                         .operation(SignalOperation.BUY_CLOSE)
                         .priceType(PriceType.LIMIT_PRICE)
                         .price(contractPrice)
-                        .volume(ctx.getDefaultVolume())
+                        .volume(shortContractPos)
                         .timeout(5000)
                         .build());
                 logger.info("买平合约 {} 仓位 {}", contractTick.lastPrice(), shortContractPos);
@@ -289,7 +297,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
                         .operation(SignalOperation.SELL_CLOSE)
                         .priceType(PriceType.LIMIT_PRICE)
                         .price(spotPrice)
-                        .volume(ctx.getDefaultVolume())
+                        .volume(longSpots)
                         .timeout(5000)
                         .build());
                 logger.info("卖平现货 {} 仓位 {}", spotTick.lastPrice(), longSpots);
@@ -314,7 +322,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
         if (contractBar == null || spotBar == null) {
             return false;
         }
-         Duration duration = Duration.between(contractBar.actionTime(), spotBar.actionTime());
+        Duration duration = Duration.between(contractBar.actionTime(), spotBar.actionTime());
         return duration.toMillis() < 10000;
     }
 
