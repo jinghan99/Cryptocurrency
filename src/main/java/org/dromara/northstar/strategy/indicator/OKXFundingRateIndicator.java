@@ -18,6 +18,7 @@ import org.dromara.northstar.indicator.model.Num;
 import org.dromara.northstar.strategy.dto.OuYIFundingRateDto;
 
 import java.math.BigDecimal;
+import java.text.SimpleDateFormat;
 import java.util.*;
 
 /**
@@ -84,8 +85,9 @@ public class OKXFundingRateIndicator extends AbstractIndicator implements Indica
         Map.Entry<Long, Double> entry = historyRateMap.floorEntry(num.timestamp());
 //        不是最新的一个费率 或者 在4小时 以内
         if (!historyRateMap.lastEntry().getKey().equals(entry.getKey())|| num.timestamp() - entry.getKey() < 1000 * 60 * 4) {
-            BigDecimal rate = BigDecimal.valueOf(entry.getValue());
-            return Num.of(Convert.toDouble(rate.multiply(new BigDecimal(100))), num.timestamp());
+            BigDecimal rate = BigDecimal.valueOf(entry.getValue()).multiply(new BigDecimal(100));
+            log.info("时间 {} ，费率：{}",timestampToDateTimeString(entry.getKey()), rate);
+            return Num.of(rate.doubleValue(), num.timestamp());
         }
         if (lastDataDTO == null) {
             return currentRate(num);
@@ -96,7 +98,7 @@ public class OKXFundingRateIndicator extends AbstractIndicator implements Indica
                 (lastDataDTO.getNextFundingTime() - System.currentTimeMillis() < advanceTime && System.currentTimeMillis() - lastDataDTO.getTs() > syncTime)) {
             return currentRate(num);
         }
-        return Num.of(Convert.toDouble(lastFundingRate), num.timestamp());
+        return Num.of(lastFundingRate.doubleValue(), num.timestamp());
     }
 
 
@@ -123,7 +125,7 @@ public class OKXFundingRateIndicator extends AbstractIndicator implements Indica
         } catch (HttpException e) {
             log.error("资金费率请求异常", e);
         }
-        return Num.of(Convert.toDouble(lastFundingRate), num.timestamp());
+        return Num.of(lastFundingRate.doubleValue(), num.timestamp());
     }
 
 
@@ -182,6 +184,22 @@ public class OKXFundingRateIndicator extends AbstractIndicator implements Indica
             log.info("载入历史费率完成 " + data.size() + " entries from " + url);
         }
         isReady = true;
+    }
+
+    /**
+     * 将时间戳转换为包含年月日时分秒的格式。
+     *
+     * @param timestamp 时间戳，表示自1970年1月1日00:00:00 GMT以来的毫秒数
+     * @return 格式化的日期字符串，例如 "2021-04-01 04:40:00"
+     */
+    public  String timestampToDateTimeString(long timestamp) {
+        // 将时间戳转换为Date对象
+        Date date = new Date(timestamp);
+
+        // 创建SimpleDateFormat对象，定义日期时间格式
+        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        // 格式化日期时间
+        return dateFormat.format(date);
     }
 
 }
