@@ -86,7 +86,6 @@ public class OKXFundingRateIndicator extends AbstractIndicator implements Indica
 //        不是最新的一个费率 或者 在4小时 以内
         if (!historyRateMap.lastEntry().getKey().equals(entry.getKey())|| num.timestamp() - entry.getKey() < 1000 * 60 * 4) {
             BigDecimal rate = BigDecimal.valueOf(entry.getValue()).multiply(new BigDecimal(100));
-            log.info("时间 {} ，费率：{}",timestampToDateTimeString(entry.getKey()), rate);
             return Num.of(rate.doubleValue(), num.timestamp());
         }
         if (lastDataDTO == null) {
@@ -181,7 +180,7 @@ public class OKXFundingRateIndicator extends AbstractIndicator implements Indica
             long lastFundingTime = data.getJSONObject(0).getLong("fundingTime");
             // 更新URL，添加before参数
             url = HISTORY_URL + "?instId=" + swap + "&before=" + lastFundingTime + "&limit=" + LIMIT;
-            log.info("载入历史费率完成 " + data.size() + " entries from " + url);
+            log.info("从 "+timestampToDateTimeString(lastFundingTime) + "载入历史费率完成 " + data.size() + " entries from " + url);
         }
         isReady = true;
     }
