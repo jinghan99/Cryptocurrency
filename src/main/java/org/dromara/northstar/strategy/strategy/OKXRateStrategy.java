@@ -228,7 +228,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
                     .priceType(PriceType.LIMIT_PRICE)
                     .price(contractPrice)
                     .volume(params.contractNum)
-                    .timeout(5000)
+                    .timeout(10000)
                     .build());
             logger.info("空开合约");
             ctx.submitOrderReq(TradeIntent.builder()
@@ -237,7 +237,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
                     .priceType(PriceType.LIMIT_PRICE)
                     .price(spotPrice)
                     .volume(params.spotNum)
-                    .timeout(5000)
+                    .timeout(10000)
                     .build());
             logger.info("多开现货");
         }
@@ -287,7 +287,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
                         .priceType(PriceType.LIMIT_PRICE)
                         .price(contractPrice)
                         .volume(shortContractPos)
-                        .timeout(5000)
+                        .timeout(10000)
                         .build());
                 logger.info("买平合约 {} 仓位 {}", contractTick.lastPrice(), shortContractPos);
             }
@@ -298,7 +298,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
                         .priceType(PriceType.LIMIT_PRICE)
                         .price(spotPrice)
                         .volume(longSpots)
-                        .timeout(5000)
+                        .timeout(10000)
                         .build());
                 logger.info("卖平现货 {} 仓位 {}", spotTick.lastPrice(), longSpots);
             }
