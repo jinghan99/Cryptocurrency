@@ -338,7 +338,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
      * @return
      */
     public boolean isTick() {
-        return params.isTick == "1";
+        return params.isTick.equals("1");
     }
 
 
