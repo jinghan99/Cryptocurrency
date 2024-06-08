@@ -83,7 +83,7 @@ public class OKXFundingRateIndicator extends AbstractIndicator implements Indica
 //        判断是否有历史数据 floorEntry 获取最接近的 之前的 一个费率
         Map.Entry<Long, Double> entry = historyRateMap.floorEntry(num.timestamp());
 //        不是最新的一个费率 或者 在4小时 以内
-        if (historyRateMap.lastEntry() != entry || num.timestamp() - entry.getKey() < 1000 * 60 * 4) {
+        if (!historyRateMap.lastEntry().getKey().equals(entry.getKey())|| num.timestamp() - entry.getKey() < 1000 * 60 * 4) {
             BigDecimal rate = BigDecimal.valueOf(entry.getValue());
             return Num.of(Convert.toDouble(rate.multiply(new BigDecimal(100))), num.timestamp());
         }
@@ -96,7 +96,7 @@ public class OKXFundingRateIndicator extends AbstractIndicator implements Indica
                 (lastDataDTO.getNextFundingTime() - System.currentTimeMillis() < advanceTime && System.currentTimeMillis() - lastDataDTO.getTs() > syncTime)) {
             return currentRate(num);
         }
-        return Num.of(Convert.toDouble(lastFundingRate.multiply(new BigDecimal(100))), num.timestamp());
+        return Num.of(Convert.toDouble(lastFundingRate), num.timestamp());
     }
 
 
@@ -118,12 +118,12 @@ public class OKXFundingRateIndicator extends AbstractIndicator implements Indica
             if (Objects.equals(rateDto.getCode(), "0") && !rateDto.getData().isEmpty()) {
                 OuYIFundingRateDto.DataDTO dataDTO = rateDto.getData().getFirst();
                 lastDataDTO = dataDTO;
-                lastFundingRate = dataDTO.getFundingRate();
+                lastFundingRate = dataDTO.getFundingRate().multiply(new BigDecimal(100));
             }
         } catch (HttpException e) {
             log.error("资金费率请求异常", e);
         }
-        return Num.of(Convert.toDouble(lastFundingRate.multiply(new BigDecimal(100))), num.timestamp());
+        return Num.of(Convert.toDouble(lastFundingRate), num.timestamp());
     }
 
 
@@ -168,9 +168,12 @@ public class OKXFundingRateIndicator extends AbstractIndicator implements Indica
             for (int i = 0; i < data.size(); i++) {
                 JSONObject entry = data.getJSONObject(i);
                 long fundingTime = entry.getLong("fundingTime");  // 资金费时间
-                double fundingRate = entry.getDouble("fundingRate");  // 资金费率
-                // 将资金费时间和资金费率存入TreeMap
+                Double fundingRate = entry.getDouble("fundingRate");  // 资金费率
                 historyRateMap.put(fundingTime, fundingRate);
+                BigDecimal rate = new BigDecimal(fundingRate.toString());
+                String formattedRate = rate.toPlainString();
+                // 将资金费时间和资金费率存入TreeMap
+                historyRateMap.put(fundingTime, Double.valueOf(formattedRate));
             }
             // 获取最后一条数据的资金费时间，用于下一次请求分页
             long lastFundingTime = data.getJSONObject(0).getLong("fundingTime");

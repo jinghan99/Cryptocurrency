@@ -220,7 +220,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
      */
     private void openBuy() {
         // 校验时间 是否同一分钟
-                 if (!verifyDate() || verifyNoPass()) {
+        if (!verifyDate() || verifyNoPass()) {
             return;
         }
         if (okxRateIndicator.value(0) <= 0) {
