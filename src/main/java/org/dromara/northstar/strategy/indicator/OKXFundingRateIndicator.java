@@ -170,7 +170,6 @@ public class OKXFundingRateIndicator extends AbstractIndicator implements Indica
                 JSONObject entry = data.getJSONObject(i);
                 long fundingTime = entry.getLong("fundingTime");  // 资金费时间
                 Double fundingRate = entry.getDouble("fundingRate");  // 资金费率
-                historyRateMap.put(fundingTime, fundingRate);
                 BigDecimal rate = new BigDecimal(fundingRate.toString());
                 String formattedRate = rate.toPlainString();
                 // 将资金费时间和资金费率存入TreeMap
