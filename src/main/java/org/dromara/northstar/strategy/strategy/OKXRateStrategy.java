@@ -24,12 +24,14 @@ import org.dromara.northstar.strategy.constant.PriceType;
 import org.dromara.northstar.strategy.domain.FixedSizeQueue;
 import org.dromara.northstar.strategy.indicator.OKXFundingRateIndicator;
 import org.dromara.northstar.strategy.model.TradeIntent;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import xyz.redtorch.pb.CoreEnum;
 
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.Date;
+import java.util.HashMap;
 
 /**
  * OKX 套利策略策略
@@ -76,6 +78,24 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
      */
     private Long lastOrderTime;
 
+    /**
+     * (
+     * 卖方挂单量
+     */
+    private int oneAskVolume ;
+
+    /**
+     * 买方挂单量
+     */
+
+    private int oneBidVolume ;
+
+    /**
+     * 挂单 map
+     */
+    private HashMap<String, TradeIntent> orderTradeMap = new HashMap<>();
+
+
     @Setter
     public static class InitParams extends DynamicParams {
 
@@ -90,7 +110,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
         private String spot;
 
         @Setting(label = "现货手数", type = FieldType.NUMBER, order = 21)
-        private int spotNum= 1;
+        private int spotNum = 1;
 
 
         @Setting(label = "合约-现货差价（%）", type = FieldType.NUMBER, order = 22)
@@ -103,7 +123,6 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
 
         @Setting(label = "几秒内不重复下单（秒）", order = 50, type = FieldType.NUMBER)
         private int noRepeatOrderWithinSeconds = 60;
-
 
 
         @Setting(label = "挂单超时撤单（秒）", order = 50, type = FieldType.NUMBER)
@@ -180,6 +199,10 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
      */
     @Override
     public void onTick(Tick tick) {
+        if (tick.askVolume() != null && tick.bidVolume() != null) {
+            oneAskVolume = tick.askVolume().getFirst();
+            oneBidVolume = tick.bidVolume().getFirst();
+        }
         if (!isTick()) {
             return;
         }
@@ -227,11 +250,11 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
             return;
         }
         //        判断是否重复下单
-        if(lastOrderTime !=null){
+        if (lastOrderTime != null) {
             // 计算两个时间戳的差值
             boolean flag = (System.currentTimeMillis() - lastOrderTime) < (params.noRepeatOrderWithinSeconds * 1000L);
             // 检查差值是否小于 （n秒）
-            if(flag){
+            if (flag) {
                 return;
             }
         }
@@ -243,31 +266,35 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
         int longSpot = ctx.getModuleAccount().getNonclosedPosition(spot, CoreEnum.DirectionEnum.D_Buy);
 //        合约价格
         double contractPrice = isTick() ? contractTick.lastPrice() : contractBar.closePrice();
-//        现货价格
+//        现货数量
         double spotPrice = isTick() ? spotTick.lastPrice() : spotBar.closePrice();
 //        计算差价百分比
         double calculatedDiffPrice = calculatePercentageDifference(spotPrice, contractPrice);
 //       无持仓  合约 - 现货 > 设置差值 并且 资金费为正
-        if (shortContractPos <= 0 && longSpot <= 0 && calculatedDiffPrice > this.params.diff && okxRateIndicator.value(0) > 0) {
+        if (oneAskVolume > 0 && shortContractPos <= 0 && longSpot <= 0 && calculatedDiffPrice > this.params.diff && okxRateIndicator.value(0) > 0) {
             lastOrderTime = System.currentTimeMillis();
-            ctx.submitOrderReq(TradeIntent.builder()
-                    .contract(swap)
-                    .operation(SignalOperation.SELL_OPEN)
-                    .priceType(PriceType.LIMIT_PRICE)
-                    .price(contractPrice)
-                    .volume(params.contractNum)
-                    .timeout(params.orderTimeout *1000L)
-                    .build());
             logger.info("空开合约");
-            ctx.submitOrderReq(TradeIntent.builder()
+            TradeIntent tradeIntent = TradeIntent.builder()
                     .contract(spot)
                     .operation(SignalOperation.BUY_OPEN)
                     .priceType(PriceType.LIMIT_PRICE)
                     .price(spotPrice)
-                    .volume(params.spotNum)
-                    .timeout(params.orderTimeout *1000L)
-                    .build());
+                    .volume(oneAskVolume)
+                    .timeout(params.orderTimeout * 1000L)
+                    .build();
             logger.info("多开现货");
+            ctx.submitOrderReq(tradeIntent);
+//            拿现货的数量买合约
+            TradeIntent swapTradeIntent = TradeIntent.builder()
+                    .contract(swap)
+                    .operation(SignalOperation.SELL_OPEN)
+                    .priceType(PriceType.LIMIT_PRICE)
+                    .price(contractPrice)
+                    .volume(oneAskVolume)
+                    .timeout(params.orderTimeout * 1000L)
+                    .build();
+            String key = spot.contractId() + spotPrice;
+            orderTradeMap.put(key, swapTradeIntent);
         }
     }
 
@@ -315,7 +342,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
                         .priceType(PriceType.LIMIT_PRICE)
                         .price(contractPrice)
                         .volume(shortContractPos)
-                        .timeout(params.orderTimeout *1000L)
+                        .timeout(params.orderTimeout * 1000L)
                         .build());
                 logger.info("买平合约 {} 仓位 {}", contractTick.lastPrice(), shortContractPos);
             }
@@ -326,7 +353,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
                         .priceType(PriceType.LIMIT_PRICE)
                         .price(spotPrice)
                         .volume(longSpots)
-                        .timeout(params.orderTimeout *1000L)
+                        .timeout(params.orderTimeout * 1000L)
                         .build());
                 logger.info("卖平现货 {} 仓位 {}", spotTick.lastPrice(), longSpots);
             }
@@ -408,5 +435,16 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
                 trade.volume(), trade.price());
         logger.info("当前模组净持仓：[{}]", ctx.getModuleAccount().getNonclosedNetPosition(trade.contract()));
         logger.info("当前模组状态：{}", ctx.getState());
+//        判断是否为 现货 成交
+        if (trade.contract().symbol().equals(params.spot)) {
+            lastOrderTime = System.currentTimeMillis();
+            logger.info("当前模组净持仓：[{}]", ctx.getModuleAccount().getNonclosedNetPosition(trade.contract()));
+            String key = trade.contract().contractId() + trade.price();
+            if (orderTradeMap.containsKey(key)) {
+                TradeIntent swapTradeIntent = orderTradeMap.get(key);
+                logger.info(" 先下单现货、现货成功后在下合约 {}", swapTradeIntent);
+                ctx.submitOrderReq(swapTradeIntent);
+            }
+        }
     }
 }
