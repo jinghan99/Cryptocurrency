@@ -94,6 +94,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
      * 挂单 map
      */
     private HashMap<String, TradeIntent> orderTradeMap = new HashMap<>();
+    private HashMap<String, String> removeKey = new HashMap<>();
 
 
     @Setter
@@ -204,7 +205,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
             oneBidVolume = tick.bidVolume().getFirst();
         }
         if (!isTick()) {
-            return;
+             return;
         }
         if (okxRateIndicator.getData().isEmpty()) {
             logger.debug("指标未准备就绪");
@@ -294,6 +295,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
                     .timeout(params.orderTimeout * 1000L)
                     .build();
             String key = spot.contractId() + spotPrice;
+            logger.info("等待现货成交");
             orderTradeMap.put(key, swapTradeIntent);
         }
     }
@@ -436,7 +438,11 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
         logger.info("当前模组净持仓：[{}]", ctx.getModuleAccount().getNonclosedNetPosition(trade.contract()));
         logger.info("当前模组状态：{}", ctx.getState());
 //        判断是否为 现货 成交
-        if (trade.contract().symbol().equals(params.spot)) {
+        Contract spot = ctx.getContract(params.spot);
+        if(removeKey.containsKey(trade.contract().contractId() + trade.price())){
+            orderTradeMap.remove(removeKey.get(trade.contract().contractId() + trade.price()));
+        }
+        if (trade.contract().symbol().equals(spot.symbol())) {
             lastOrderTime = System.currentTimeMillis();
             logger.info("当前模组净持仓：[{}]", ctx.getModuleAccount().getNonclosedNetPosition(trade.contract()));
             String key = trade.contract().contractId() + trade.price();
@@ -444,6 +450,7 @@ public class OKXRateStrategy extends AbstractStrategy implements TradeStrategy {
                 TradeIntent swapTradeIntent = orderTradeMap.get(key);
                 logger.info(" 先下单现货、现货成功后在下合约 {}", swapTradeIntent);
                 ctx.submitOrderReq(swapTradeIntent);
+                removeKey.put(swapTradeIntent.getContract().contractId() + swapTradeIntent.getPrice(), key);
             }
         }
     }
